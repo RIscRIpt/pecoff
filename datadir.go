@@ -1,10 +1,6 @@
 package pecoff
 
-type IDataDirectory interface {
-}
-
 type DataDirectory struct {
-	file *File
-
+	file   *File
 	Header DataDirectoryHeader
 }

@@ -1,179 +1,202 @@
 package pecoff
 
+// Sizes
+const (
+	SIZEOF_IMAGE_DOS_HEADER            = 64
+	SIZEOF_IMAGE_FILE_HEADER           = 20
+	SIZEOF_IMAGE_OPTIONAL_HEADER32     = 224
+	SIZEOF_IMAGE_OPTIONAL_HEADER64     = 240
+	SIZEOF_IMAGE_DATA_DIRECTORY_HEADER = 8
+	SIZEOF_IMAGE_SECTION_HEADER        = 40
+	SIZEOF_IMAGE_RELOCATION            = 10
+	SIZEOF_IMAGE_IMPORT_DESCRIPTOR     = 20
+	SIZEOF_IMAGE_BASE_RELOCATION       = 8
+	SIZEOF_IMAGE_BASE_RELOCATION_ENTRY = 2
+)
+
+// Signatures
 var (
 	MZ_SIGN = [2]byte{'M', 'Z'}
 	PE_SIGN = [4]byte{'P', 'E', 0, 0}
 )
 
-type DosHeader struct {
-	E_magic    uint16     // Magic number
-	E_cblp     uint16     // Bytes on last page of file
-	E_cp       uint16     // Pages in file
-	E_crlc     uint16     // Relocations
-	E_cparhdr  uint16     // Size of header in paragraphs
-	E_minalloc uint16     // Minimum extra paragraphs needed
-	E_maxalloc uint16     // Maximum extra paragraphs needed
-	E_ss       uint16     // Initial (relative) SS value
-	E_sp       uint16     // Initial SP value
-	E_csum     uint16     // Checksum
-	E_ip       uint16     // Initial IP value
-	E_cs       uint16     // Initial (relative) CS value
-	E_lfarlc   uint16     // File address of relocation table
-	E_ovno     uint16     // Overlay number
-	E_res      [4]uint16  // Reserved words
-	E_oemid    uint16     // OEM identifier (for e_oeminfo)
-	E_oeminfo  uint16     // OEM information; e_oemid specific
-	E_res2     [10]uint16 // Reserved words
-	E_lfanew   uint32     // File address of new exe header
-}
+// PE/COFF types
+type (
+	// DOS Header
+	DosHeader struct {
+		E_magic    uint16     // Magic number
+		E_cblp     uint16     // Bytes on last page of file
+		E_cp       uint16     // Pages in file
+		E_crlc     uint16     // Relocations
+		E_cparhdr  uint16     // Size of header in paragraphs
+		E_minalloc uint16     // Minimum extra paragraphs needed
+		E_maxalloc uint16     // Maximum extra paragraphs needed
+		E_ss       uint16     // Initial (relative) SS value
+		E_sp       uint16     // Initial SP value
+		E_csum     uint16     // Checksum
+		E_ip       uint16     // Initial IP value
+		E_cs       uint16     // Initial (relative) CS value
+		E_lfarlc   uint16     // File address of relocation table
+		E_ovno     uint16     // Overlay number
+		E_res      [4]uint16  // Reserved words
+		E_oemid    uint16     // OEM identifier (for e_oeminfo)
+		E_oeminfo  uint16     // OEM information; e_oemid specific
+		E_res2     [10]uint16 // Reserved words
+		E_lfanew   uint32     // File address of new exe header
+	}
 
-const SIZEOF_IMAGE_DOS_HEADER = 64
+	// COFF File Header (presented in both Object and Image files)
+	FileHeader struct {
+		Machine              uint16
+		NumberOfSections     uint16
+		TimeDateStamp        uint32
+		PointerToSymbolTable uint32
+		NumberOfSymbols      uint32
+		SizeOfOptionalHeader uint16
+		Characteristics      uint16
+	}
 
-type FileHeader struct {
-	Machine              uint16
-	NumberOfSections     uint16
-	TimeDateStamp        uint32
-	PointerToSymbolTable uint32
-	NumberOfSymbols      uint32
-	SizeOfOptionalHeader uint16
-	Characteristics      uint16
-}
+	// OptionalHeader standard fields (defined for all implementations of COFF, including UNIX)
+	OptionalHeader_Standard struct {
+		Magic                   uint16
+		MajorLinkerVersion      uint8
+		MinorLinkerVersion      uint8
+		SizeOfCode              uint32
+		SizeOfInitializedData   uint32
+		SizeOfUninitializedData uint32
+		AddressOfEntryPoint     uint32
+		BaseOfCode              uint32
+	}
 
-const SIZEOF_IMAGE_FILE_HEADER = 20
+	// OptionalHeader Windows-Specific fields (common between 32bit and 64bit images)
+	OptionalHeader_Extension_FixedSize1 struct {
+		SectionAlignment            uint32
+		FileAlignment               uint32
+		MajorOperatingSystemVersion uint16
+		MinorOperatingSystemVersion uint16
+		MajorImageVersion           uint16
+		MinorImageVersion           uint16
+		MajorSubsystemVersion       uint16
+		MinorSubsystemVersion       uint16
+		Win32VersionValue           uint32
+		SizeOfImage                 uint32
+		SizeOfHeaders               uint32
+		CheckSum                    uint32
+		Subsystem                   uint16
+		DllCharacteristics          uint16
+	}
 
-type OptionalHeader_Standard struct {
-	Magic                   uint16
-	MajorLinkerVersion      uint8
-	MinorLinkerVersion      uint8
-	SizeOfCode              uint32
-	SizeOfInitializedData   uint32
-	SizeOfUninitializedData uint32
-	AddressOfEntryPoint     uint32
-	BaseOfCode              uint32
-}
+	// OptionalHeader Windows-Specific fields [part 2] (common between 32bit and 64bit images)
+	OptionalHeader_Extension_FixedSize2 struct {
+		LoaderFlags         uint32
+		NumberOfRvaAndSizes uint32
+	}
 
-type OptionalHeader_Extension_FixedSize1 struct {
-	SectionAlignment            uint32
-	FileAlignment               uint32
-	MajorOperatingSystemVersion uint16
-	MinorOperatingSystemVersion uint16
-	MajorImageVersion           uint16
-	MinorImageVersion           uint16
-	MajorSubsystemVersion       uint16
-	MinorSubsystemVersion       uint16
-	Win32VersionValue           uint32
-	SizeOfImage                 uint32
-	SizeOfHeaders               uint32
-	CheckSum                    uint32
-	Subsystem                   uint16
-	DllCharacteristics          uint16
-}
+	// Complete OptionalHeader for 32bit images
+	OptionalHeader32 struct {
+		OptionalHeader_Standard
+		BaseOfData uint32
+		ImageBase  uint32
+		OptionalHeader_Extension_FixedSize1
+		SizeOfStackReserve uint32
+		SizeOfStackCommit  uint32
+		SizeOfHeapReserve  uint32
+		SizeOfHeapCommit   uint32
+		OptionalHeader_Extension_FixedSize2
+		DataDirectoriesHeaders [16]DataDirectoryHeader
+	}
 
-type OptionalHeader_Extension_FixedSize2 struct {
-	LoaderFlags         uint32
-	NumberOfRvaAndSizes uint32
-}
+	// Complete OptionalHeader for 64bit images
+	OptionalHeader64 struct {
+		OptionalHeader_Standard
+		ImageBase uint64
+		OptionalHeader_Extension_FixedSize1
+		SizeOfStackReserve uint64
+		SizeOfStackCommit  uint64
+		SizeOfHeapReserve  uint64
+		SizeOfHeapCommit   uint64
+		OptionalHeader_Extension_FixedSize2
+		DataDirectoriesHeaders [16]DataDirectoryHeader
+	}
 
-type OptionalHeader32 struct {
-	OptionalHeader_Standard
-	BaseOfData uint32
-	ImageBase  uint32
-	OptionalHeader_Extension_FixedSize1
-	SizeOfStackReserve uint32
-	SizeOfStackCommit  uint32
-	SizeOfHeapReserve  uint32
-	SizeOfHeapCommit   uint32
-	OptionalHeader_Extension_FixedSize2
-	DataDirectoriesHeaders [16]DataDirectoryHeader
-}
+	// Complete OptionalHeader which can be used to contain any of OptionalHeader (32/64bit)
+	OptionalHeaderCommon struct {
+		OptionalHeader_Standard
+		BaseOfData uint64
+		ImageBase  uint64
+		OptionalHeader_Extension_FixedSize1
+		SizeOfStackReserve uint64
+		SizeOfStackCommit  uint64
+		SizeOfHeapReserve  uint64
+		SizeOfHeapCommit   uint64
+		OptionalHeader_Extension_FixedSize2
+		DataDirectoriesHeaders [16]DataDirectoryHeader
+	}
 
-const SIZEOF_IMAGE_OPTIONAL_HEADER32 = 224
+	// DataDirectory header
+	DataDirectoryHeader struct {
+		VirtualAddress uint32
+		Size           uint32
+	}
 
-type OptionalHeader64 struct {
-	OptionalHeader_Standard
-	ImageBase uint64
-	OptionalHeader_Extension_FixedSize1
-	SizeOfStackReserve uint64
-	SizeOfStackCommit  uint64
-	SizeOfHeapReserve  uint64
-	SizeOfHeapCommit   uint64
-	OptionalHeader_Extension_FixedSize2
-	DataDirectoriesHeaders [16]DataDirectoryHeader
-}
+	SectionHeader struct {
+		Name                 [8]uint8
+		VirtualSize          uint32
+		VirtualAddress       uint32
+		SizeOfRawData        uint32
+		PointerToRawData     uint32
+		PointerToRelocations uint32
+		PointerToLineNumbers uint32
+		NumberOfRelocations  uint16
+		NumberOfLineNumbers  uint16
+		Characteristics      uint32
+	}
 
-const SIZEOF_IMAGE_OPTIONAL_HEADER64 = 240
+	Relocation struct {
+		VirtualAddress   uint32
+		SymbolTableIndex uint32
+		Type             uint16
+	}
 
-type DataDirectoryHeader struct {
-	VirtualAddress uint32
-	Size           uint32
-}
+	ImageImportDescriptor struct {
+		OriginalFirstThunk uint32 // RVA to original unbound IAT (PIMAGE_THUNK_DATA)
+		Timestamp          uint32 // 0 if not bound, -1 if bound, and real date\time stamp in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND) O.W. date/time stamp of DLL bound to (Old BIND)
+		ForwarderChain     uint32 // -1 if no forwarders
+		Name               uint32 // RVA of an ASCII string that contains the name of the DLL
+		FirstThunk         uint32 // RVA to IAT (if bound this IAT has actual addresses)
+	}
 
-const SIZEOF_IMAGE_DATA_DIRECTORY_HEADER = 8
-
-type SectionHeader struct {
-	Name                 [8]uint8
-	VirtualSize          uint32
-	VirtualAddress       uint32
-	SizeOfRawData        uint32
-	PointerToRawData     uint32
-	PointerToRelocations uint32
-	PointerToLineNumbers uint32
-	NumberOfRelocations  uint16
-	NumberOfLineNumbers  uint16
-	Characteristics      uint32
-}
-
-const SIZEOF_IMAGE_SECTION_HEADER = 40
-
-type Relocation struct {
-	VirtualAddress   uint32
-	SymbolTableIndex uint32
-	Type             uint16
-}
-
-const SIZEOF_IMAGE_RELOCATION = 10
-
-type ImageImportDescriptor struct {
-	OriginalFirstThunk uint32 // RVA to original unbound IAT (PIMAGE_THUNK_DATA)
-	Timestamp          uint32 // 0 if not bound, -1 if bound, and real date\time stamp in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND) O.W. date/time stamp of DLL bound to (Old BIND)
-	ForwarderChain     uint32 // -1 if no forwarders
-	Name               uint32 // RVA of an ASCII string that contains the name of the DLL
-	FirstThunk         uint32 // RVA to IAT (if bound this IAT has actual addresses)
-}
-
-const SIZEOF_IMAGE_IMPORT_DESCRIPTOR = 20
-
-type ImageBaseRelocation struct {
-	VirtualAddress uint32
-	SizeOfBlock    uint32
-}
-
-const SIZEOF_IMAGE_BASE_RELOCATION = 8
-const SIZEOF_IMAGE_BASE_RELOCATION_ENTRY = 2
-
-const (
-	IMAGE_FILE_MACHINE_UNKNOWN   = 0x0
-	IMAGE_FILE_MACHINE_AM33      = 0x1d3
-	IMAGE_FILE_MACHINE_AMD64     = 0x8664
-	IMAGE_FILE_MACHINE_ARM       = 0x1c0
-	IMAGE_FILE_MACHINE_EBC       = 0xebc
-	IMAGE_FILE_MACHINE_I386      = 0x14c
-	IMAGE_FILE_MACHINE_IA64      = 0x200
-	IMAGE_FILE_MACHINE_M32R      = 0x9041
-	IMAGE_FILE_MACHINE_MIPS16    = 0x266
-	IMAGE_FILE_MACHINE_MIPSFPU   = 0x366
-	IMAGE_FILE_MACHINE_MIPSFPU16 = 0x466
-	IMAGE_FILE_MACHINE_POWERPC   = 0x1f0
-	IMAGE_FILE_MACHINE_POWERPCFP = 0x1f1
-	IMAGE_FILE_MACHINE_R4000     = 0x166
-	IMAGE_FILE_MACHINE_SH3       = 0x1a2
-	IMAGE_FILE_MACHINE_SH3DSP    = 0x1a3
-	IMAGE_FILE_MACHINE_SH4       = 0x1a6
-	IMAGE_FILE_MACHINE_SH5       = 0x1a8
-	IMAGE_FILE_MACHINE_THUMB     = 0x1c2
-	IMAGE_FILE_MACHINE_WCEMIPSV2 = 0x169
+	ImageBaseRelocation struct {
+		VirtualAddress uint32
+		SizeOfBlock    uint32
+	}
 )
 
+// Image file machine types
+const (
+	IMAGE_FILE_MACHINE_UNKNOWN   uint16 = 0x0
+	IMAGE_FILE_MACHINE_AM33      uint16 = 0x1d3
+	IMAGE_FILE_MACHINE_AMD64     uint16 = 0x8664
+	IMAGE_FILE_MACHINE_ARM       uint16 = 0x1c0
+	IMAGE_FILE_MACHINE_EBC       uint16 = 0xebc
+	IMAGE_FILE_MACHINE_I386      uint16 = 0x14c
+	IMAGE_FILE_MACHINE_IA64      uint16 = 0x200
+	IMAGE_FILE_MACHINE_M32R      uint16 = 0x9041
+	IMAGE_FILE_MACHINE_MIPS16    uint16 = 0x266
+	IMAGE_FILE_MACHINE_MIPSFPU   uint16 = 0x366
+	IMAGE_FILE_MACHINE_MIPSFPU16 uint16 = 0x466
+	IMAGE_FILE_MACHINE_POWERPC   uint16 = 0x1f0
+	IMAGE_FILE_MACHINE_POWERPCFP uint16 = 0x1f1
+	IMAGE_FILE_MACHINE_R4000     uint16 = 0x166
+	IMAGE_FILE_MACHINE_SH3       uint16 = 0x1a2
+	IMAGE_FILE_MACHINE_SH3DSP    uint16 = 0x1a3
+	IMAGE_FILE_MACHINE_SH4       uint16 = 0x1a6
+	IMAGE_FILE_MACHINE_SH5       uint16 = 0x1a8
+	IMAGE_FILE_MACHINE_THUMB     uint16 = 0x1c2
+	IMAGE_FILE_MACHINE_WCEMIPSV2 uint16 = 0x169
+)
+
+// DataDirectory entries of an OptionalHeader
 const (
 	IMAGE_NUMBEROF_DIRECTORY_ENTRIES = 16
 
@@ -194,6 +217,7 @@ const (
 	IMAGE_DIRECTORY_ENTRY_COM_DESCRIPTOR = 14 // COM Runtime descriptor
 )
 
+// Section I386 relocations
 const (
 	IMAGE_REL_I386_ABSOLUTE = 0x0000 // Reference is absolute, no relocation is necessary
 	IMAGE_REL_I386_DIR16    = 0x0001 // Direct 16-bit reference to the symbols virtual address
@@ -208,6 +232,7 @@ const (
 	IMAGE_REL_I386_REL32    = 0x0014 // PC-relative 32-bit reference to the symbols virtual address
 )
 
+// Section AMD64 relocations
 const (
 	IMAGE_REL_AMD64_ABSOLUTE = 0x0000 // Reference is absolute, no relocation is necessary
 	IMAGE_REL_AMD64_ADDR64   = 0x0001 // 64-bit address (VA).
@@ -228,16 +253,17 @@ const (
 	IMAGE_REL_AMD64_SSPAN32  = 0x0010 // 32 bit signed span-dependent value applied at link time
 )
 
+// Base relocations
 const (
-	IMAGE_REL_BASED_ABSOLUTE           = 0
-	IMAGE_REL_BASED_HIGH               = 1
-	IMAGE_REL_BASED_LOW                = 2
-	IMAGE_REL_BASED_HIGHLOW            = 3
-	IMAGE_REL_BASED_HIGHADJ            = 4
-	IMAGE_REL_BASED_MACHINE_SPECIFIC_5 = 5
-	IMAGE_REL_BASED_RESERVED           = 6
-	IMAGE_REL_BASED_MACHINE_SPECIFIC_7 = 7
-	IMAGE_REL_BASED_MACHINE_SPECIFIC_8 = 8
-	IMAGE_REL_BASED_MACHINE_SPECIFIC_9 = 9
-	IMAGE_REL_BASED_DIR64              = 10
+	IMAGE_REL_BASED_ABSOLUTE           = 0  // The base relocation is skipped. This type can be used to pad a block.
+	IMAGE_REL_BASED_HIGH               = 1  // The base relocation adds the high 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the high value of a 32-bit word.
+	IMAGE_REL_BASED_LOW                = 2  // The base relocation adds the low 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the low half of a 32-bit word.
+	IMAGE_REL_BASED_HIGHLOW            = 3  // The base relocation applies all 32 bits of the difference to the 32-bit field at offset.
+	IMAGE_REL_BASED_HIGHADJ            = 4  // The base relocation adds the high 16 bits of the difference to the 16-bit field at offset. The 16-bit field represents the high value of a 32-bit word. The low 16 bits of the 32-bit value are stored in the 16-bit word that follows this base relocation. This means that this base relocation occupies two slots.
+	IMAGE_REL_BASED_MACHINE_SPECIFIC_5 = 5  // MIPS / ARM
+	IMAGE_REL_BASED_RESERVED           = 6  // shouldn't be set
+	IMAGE_REL_BASED_MACHINE_SPECIFIC_7 = 7  // ARM
+	IMAGE_REL_BASED_MACHINE_SPECIFIC_8 = 8  // ???
+	IMAGE_REL_BASED_MACHINE_SPECIFIC_9 = 9  // ???
+	IMAGE_REL_BASED_DIR64              = 10 // The base relocation applies the difference to the 64-bit field at offset.
 )

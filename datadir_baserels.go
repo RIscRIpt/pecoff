@@ -1,12 +1,12 @@
 package pecoff
 
-type DD_BaseRelocations struct {
+type DdBaseRelocations struct {
 	DataDirectory
 	blocks []*BaseRelocationBlock
 }
 
-func NewBaseRelocations(file *File, ddh DataDirectoryHeader) *DD_BaseRelocations {
-	return &DD_BaseRelocations{
+func NewDdBaseRelocations(file *File, ddh DataDirectoryHeader) *DdBaseRelocations {
+	return &DdBaseRelocations{
 		DataDirectory: DataDirectory{
 			file:   file,
 			Header: ddh,
@@ -14,9 +14,9 @@ func NewBaseRelocations(file *File, ddh DataDirectoryHeader) *DD_BaseRelocations
 	}
 }
 
-func (r *DD_BaseRelocations) Get() []*BaseRelocationBlock {
+func (r *DdBaseRelocations) Get() []*BaseRelocationBlock {
 	if r.Header.Size > 0 && r.blocks == nil {
-		block_offset := r.file.va_to_offset(r.Header.VirtualAddress)
+		block_offset := r.file.VaToOffset(r.Header.VirtualAddress)
 		for {
 			newBlock := NewBaseRelocationBlock(r.file, block_offset)
 			if newBlock == nil {

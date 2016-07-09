@@ -1,91 +1,73 @@
 package pecoff
 
 import (
-	"bufio"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"os"
-	"sort"
+	"io"
 )
 
+// List of supported pe/coff MachineTypes by this parser
+var supportedMachineTypes = [...]uint16{
+	IMAGE_FILE_MACHINE_I386,
+	IMAGE_FILE_MACHINE_AMD64,
+}
+
+// File contains embedded io.Reader and all the fields of a PE/COFF file.
 type File struct {
-	*os.File
-
-	*DosHeader
-	*FileHeader
-	OptionalHeader IOptionalHeader
-
-	Sections
-
-	//Exports         *DD_Exports
-	Imports *DD_Imports
-	//Resources       *DD_Resources
-	//Exceptions      *DD_Exceptions
-	//Security        *DD_Security
-	BaseRelocations *DD_BaseRelocations
-	//Debug           *DD_Debug
-	//Architecture    *DD_Architecture
-	//GlobalPtrs      *DD_GlobalPtrs
-	//TLS             *DD_TLS
-	//LoadConfig      *DD_LoadConfig
-	//BoundImports    *DD_BoundImport
-	//IAT             *DD_IAT
-	//DelayImports    *DD_DelayImports
-	//COMDescriptor   *DD_COMDescriptors
+	*BPReader
+	DosHeader      *DosHeader
+	FileHeader     *FileHeader
+	OptionalHeader *OptionalHeader
+	Sections       Sections
 }
 
-func Open(name string) (*File, error) {
-	f, err := os.Open(name)
-	if err != nil {
-		return nil, err
-	}
-	return &File{
-		File: f,
-	}, nil
+// NewFile creates a new File object
+func NewFile(reader io.ReadSeeker) (f *File) {
+	f = new(File)
+	f.BPReader = NewBPReader(f, reader)
+	return
 }
 
-func (f *File) Close() error {
-	return f.File.Close()
-}
-
-func (f *File) ReadAll() (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = r.(error)
-		}
-	}()
-
-	f.read_headers()
-	f.read_datadirectories()
-	return nil
-}
-
-func (f *File) SaveAs(name string) error {
-	panic("Not implemented")
-}
-
+// Parse parses pe/coff file reading all the header data of the file into memory
+// Returns error if any occured during the parsing
 func (f *File) Parse() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = r.(error)
 		}
 	}()
-
-	f.read_headers()
+	f.ReadHeaders()
+	f.ParseDataDirectories()
+	f.ParseSections()
 	return nil
 }
 
+// SaveAs writes pe/coff file to `out`, and returns error if any
+func (f *File) SaveAs(out io.Writer) error {
+	return errors.New("Not implemented")
+}
+
+// Is64Bit returns true if Machine of file header equals to AMD64
 func (f *File) Is64Bit() bool {
 	return f.FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64
 }
 
+// VaToOffset returns a file offset which points to
+// data pointed by `va` virtual address
+func (f *File) VaToOffset(va uint32) int64 {
+	s := f.Sections.GetByVA(va)
+	if s == nil {
+		panic(fmt.Errorf("Failed to get a section by VA(%x)", va))
+	}
+	return s.VaToSectionOffset(va)
+}
+
 // === File offsets getters === {{{1
-func (f *File) get_dos_header_offset() int64 {
+func (f *File) getDosHeaderOffset() int64 {
 	return 0 //DOS Header is always in the beggining of the file (MZ)
 }
 
-func (f *File) get_coff_header_offset() int64 {
+func (f *File) getCoffHeaderOffset() int64 {
 	if f.DosHeader != nil {
 		return int64(f.DosHeader.E_lfanew) + 4
 	} else {
@@ -93,163 +75,90 @@ func (f *File) get_coff_header_offset() int64 {
 	}
 }
 
-func (f *File) get_opt_header_offset() int64 {
-	return f.get_coff_header_offset() + int64(binary.Size(f.FileHeader))
+func (f *File) getOptHeaderOffset() int64 {
+	return f.getCoffHeaderOffset() + int64(SIZEOF_IMAGE_FILE_HEADER)
 }
 
-func (f *File) get_sections_headers_offset() int64 {
-	return f.get_opt_header_offset() + int64(f.FileHeader.SizeOfOptionalHeader)
+func (f *File) getSectionsHeadersOffset() int64 {
+	return f.getOptHeaderOffset() + int64(f.FileHeader.SizeOfOptionalHeader)
 }
 
 // End File offsets getters }}}1
-// === File read helpers === {{{1
-func (f *File) seek(offset int64) {
-	if _, err := f.Seek(offset, os.SEEK_SET); err != nil {
-		panic(err)
-	}
-}
-
-func (f *File) read_at_into(offset int64, data interface{}) {
-	f.seek(offset)
-	if err := binary.Read(f, binary.LittleEndian, data); err != nil {
-		panic(err)
-	}
-}
-
-func (f *File) va_to_offset(va uint32) int64 {
-	i := sort.Search(f.Sections.Len(), func(i int) bool {
-		return f.Sections[i].Header.VirtualAddress+f.Sections[i].Header.VirtualSize >= va
-	})
-	if i < f.Sections.Len() {
-		return int64(va - f.Sections[i].Header.VirtualAddress + f.Sections[i].Header.PointerToRawData)
-	} else {
-		panic(fmt.Errorf("Failed to convert VA(%x) to the section's offset", va))
-	}
-}
-
-func (f *File) read_va_into(va uint32, data interface{}) {
-	f.read_at_into(f.va_to_offset(va), data)
-}
-
-func (f *File) read_string_at(offset int64) (line string) {
-	f.seek(offset)
-	line, err := bufio.NewReader(f).ReadString(0)
-	if err != nil {
-		panic(err)
-	}
-	return
-}
-
-func (f *File) read_string_va(va uint32) string {
-	return f.read_string_at(f.va_to_offset(va))
-}
-
-/// End File read helpers }}}1
 // === File checkers === {{{1
-func (f *File) has_dos_header() bool {
+func (f *File) HasDosHeader() bool {
 	var sign [2]byte
-	f.read_at_into(f.get_dos_header_offset(), &sign)
+	f.ReadAtInto(f.getDosHeaderOffset(), &sign)
 	return sign == MZ_SIGN
 }
 
-func (f *File) is_valid_pe_signature() bool {
+func (f *File) IsValidPeSignature() bool {
 	var sign [4]byte
 	if f.DosHeader != nil /*&& f.DosHeader.e_lfanew == 0x3C*/ {
-		f.read_at_into(int64(f.DosHeader.E_lfanew), &sign)
+		f.ReadAtInto(int64(f.DosHeader.E_lfanew), &sign)
 	}
 	return sign == PE_SIGN
 }
 
-func (f *File) is_supported_machine() bool {
-	switch f.FileHeader.Machine {
-	case IMAGE_FILE_MACHINE_I386:
-	case IMAGE_FILE_MACHINE_AMD64:
-	default:
-		return false
+func (f *File) IsSupportedMachine() bool {
+	for _, sm := range supportedMachineTypes {
+		if sm == f.FileHeader.Machine {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
-func (f *File) has_opt_header() bool {
+func (f *File) HasOptHeader() bool {
 	return f.FileHeader != nil && f.FileHeader.SizeOfOptionalHeader > 0
 }
 
 // End File checkers }}}1
 // === File headers readers === {{{1
-func (f *File) get_dd_header(id int) DataDirectoryHeader {
-	if id < 0 || id >= IMAGE_NUMBEROF_DIRECTORY_ENTRIES {
-		panic(fmt.Errorf("Invalid DataDirectory index (%d)", id))
-	}
-	return f.OptionalHeader.DD_Headers()[id]
-}
-
-func (f *File) read_headers() {
-	if f.has_dos_header() {
-		f.read_dos_header()
-		if !f.is_valid_pe_signature() {
+func (f *File) ReadHeaders() {
+	if f.HasDosHeader() {
+		f.ReadDosHeader()
+		if !f.IsValidPeSignature() {
 			panic(errors.New("Invalid PE Signature!"))
 		}
 	}
-	f.read_coff_header()
-	if !f.is_supported_machine() {
+	f.ReadCoffHeader()
+	if !f.IsSupportedMachine() {
 		panic(fmt.Errorf("Unsupported image file machine %04x", f.FileHeader.Machine))
 	}
-	if f.has_opt_header() {
-		f.read_opt_header()
+	if f.HasOptHeader() {
+		f.ReadOptHeader()
 	}
-	f.read_sections_headers()
+	f.ReadSectionsHeaders()
 }
 
-func (f *File) read_dos_header() {
+func (f *File) ReadDosHeader() {
 	f.DosHeader = new(DosHeader)
-	f.read_at_into(f.get_dos_header_offset(), f.DosHeader)
+	f.ReadAtInto(f.getDosHeaderOffset(), f.DosHeader)
 }
 
-func (f *File) read_coff_header() {
+func (f *File) ReadCoffHeader() {
 	f.FileHeader = new(FileHeader)
-	f.read_at_into(f.get_coff_header_offset(), f.FileHeader)
+	f.ReadAtInto(f.getCoffHeaderOffset(), f.FileHeader)
 }
 
-func (f *File) read_opt_header() {
-	switch f.FileHeader.SizeOfOptionalHeader {
-	case SIZEOF_IMAGE_OPTIONAL_HEADER32:
-		f.OptionalHeader = new(OptionalHeader32)
-		f.read_at_into(f.get_opt_header_offset(), f.OptionalHeader)
-	case SIZEOF_IMAGE_OPTIONAL_HEADER64:
-		f.OptionalHeader = new(OptionalHeader64)
-		f.read_at_into(f.get_opt_header_offset(), f.OptionalHeader)
-	default:
-		panic(fmt.Errorf("Unknown SizeOfOptionalHeader = %d", f.FileHeader.SizeOfOptionalHeader))
-	}
+func (f *File) ReadOptHeader() {
+	f.OptionalHeader = NewOptionalHeader(f, f.FileHeader.SizeOfOptionalHeader)
 }
 
-func (f *File) read_sections_headers() {
-	f.Sections = make(Sections, int(f.NumberOfSections))
-	for i := 0; i < len(f.Sections); i++ {
-		f.Sections[i] = NewSection(f, i)
-	}
-	sort.Sort(f.Sections)
+func (f *File) ReadSectionsHeaders() {
+	f.Sections = NewSections(f, f.FileHeader.NumberOfSections)
 }
 
 // End File headers readers }}}1
-// === File data directories readers === {{{1
-func (f *File) read_datadirectories() {
-	f.read_dd_imports()
-	f.read_dd_baserelocations()
-}
 
-func (f *File) read_dd_imports() {
-	ddh := f.get_dd_header(IMAGE_DIRECTORY_ENTRY_IMPORT)
-	if ddh.Size != 0 {
-		f.Imports = NewImports(f, ddh)
+func (f *File) ParseDataDirectories() {
+	if f.OptionalHeader != nil && f.OptionalHeader.DataDirectories != nil {
+		f.OptionalHeader.DataDirectories.Parse()
 	}
 }
 
-func (f *File) read_dd_baserelocations() {
-	ddh := f.get_dd_header(IMAGE_DIRECTORY_ENTRY_BASERELOC)
-	if ddh.Size != 0 {
-		f.BaseRelocations = NewBaseRelocations(f, ddh)
+func (f *File) ParseSections() {
+	for _, s := range f.Sections {
+		s.Parse()
 	}
 }
-
-// End File data directories readers === }}}1

@@ -1,9 +1,6 @@
 package pecoff
 
-import (
-	"encoding/binary"
-	"fmt"
-)
+import "fmt"
 
 type Import struct {
 	file *File
@@ -11,14 +8,14 @@ type Import struct {
 	ImageImportDescriptor
 
 	library   string
-	functions []string
+	functions map[string]int64
 }
 
 func NewImport(file *File, offset int64) (i *Import) {
 	i = &Import{
 		file: file,
 	}
-	file.read_at_into(offset, &i.ImageImportDescriptor)
+	file.ReadAtInto(offset, &i.ImageImportDescriptor)
 	if !i.isEmpty() {
 		return i
 	} else {
@@ -32,14 +29,15 @@ func (i *Import) isEmpty() bool {
 
 func (i *Import) Library() string {
 	if i.library == "" {
-		i.library = i.file.read_string_va(i.Name)
+		i.library = i.file.ReadStringVa(i.Name)
 	}
 	return i.library
 }
 
-func (i *Import) Functions() []string {
+func (i *Import) Functions() map[string]int64 {
 	if i.functions == nil {
-		offset := i.file.va_to_offset(i.OriginalFirstThunk)
+		i.functions = make(map[string]int64)
+		offset := i.file.VaToOffset(i.OriginalFirstThunk)
 		for {
 			t := i.newThunk(offset)
 			if t.IsNull() {
@@ -47,23 +45,34 @@ func (i *Import) Functions() []string {
 			}
 			var newThunkName string
 			if !t.IsOrdinal() {
-				newThunkName = i.file.read_string_va(t.NameRVA() + 2)
+				newThunkName = i.file.ReadStringVa(t.NameRVA())
 			} else {
 				newThunkName = fmt.Sprintf("#%d", t.Ordinal())
 			}
-			i.functions = append(i.functions, newThunkName)
-			offset += int64(binary.Size(t))
+			i.functions[newThunkName] = offset
+			offset += t.Size()
 		}
 	}
 	return i.functions
 }
 
-func (i *Import) newThunk(offset int64) (t Thunk) {
+func (i *Import) newThunk(offset int64) (t ImportThunk) {
 	if i.file.Is64Bit() {
-		t = new(Thunk64)
+		t = new(ImportThunk64)
 	} else {
-		t = new(Thunk32)
+		t = new(ImportThunk32)
 	}
-	i.file.read_at_into(offset, t)
+	i.file.ReadAtInto(offset, t)
 	return
 }
+
+// func (i *Import) SetAddresses(addresses map[string]uint64) {
+// 	for function := range addresses {
+// 		s := i.file.Sections.GetByVA(i.functions[function])
+// 		if i.file.Is64Bit() {
+// 			s.WriteVA(va, addresses[function])
+// 		} else {
+// 			s.WriteVA(va, uint32(addresses[function]))
+// 		}
+// 	}
+// }
