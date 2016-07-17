@@ -1,4 +1,4 @@
-package binary
+package binutil
 
 import (
 	"io/ioutil"
@@ -13,7 +13,7 @@ func TestByteSlice(t *testing.T) {
 	}
 	b := []byte("****_Hello, gophers")
 	b[4] = byte(len(b) - 5)
-	bs := ByteSlice(b)
+	bs := WrapByteSlice(b)
 	err := bs.ReadAtInto(&s, 4)
 	if err != nil {
 		t.Fatalf("ReadAtInto failed: %s\n", err)
@@ -28,7 +28,7 @@ func TestByteSlice(t *testing.T) {
 }
 
 func TestReaderAt(t *testing.T) {
-	tmpfile, err := ioutil.TempFile("", "pecoff_binary_TestReaderAt.tmp")
+	tmpfile, err := ioutil.TempFile("", "pecoff_binutil_TestReaderAt.tmp")
 	if err != nil {
 		t.Fatalf("ioutil.TempFile failed: %s\n", err)
 	}
@@ -46,7 +46,7 @@ func TestReaderAt(t *testing.T) {
 		t.Fatalf("tmpfile.Write failed: %s\n", err)
 	}
 
-	rat := ReaderAt(tmpfile)
+	rat := WrapReaderAt(tmpfile)
 	err = rat.ReadAtInto(&s, 4)
 	if err != nil {
 		t.Fatalf("ReadAtInto failed: %s\n", err)

@@ -1,4 +1,6 @@
-package binary
+package binutil
+
+import "io"
 
 // ReaderAtInto is the interface that wraps the ReadAtInto method.
 //
@@ -17,5 +19,7 @@ package binary
 //
 // Implementations must not retain p.
 type ReaderAtInto interface {
+	io.Reader
+	io.ReaderAt
 	ReadAtInto(p interface{}, off int64) error
 }
