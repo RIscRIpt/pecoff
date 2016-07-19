@@ -22,4 +22,5 @@ type ReaderAtInto interface {
 	io.Reader
 	io.ReaderAt
 	ReadAtInto(p interface{}, off int64) error
+	ReadStringAt(off int64, maxlen int) (string, error)
 }
