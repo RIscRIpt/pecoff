@@ -22,20 +22,8 @@ func (s *Section) VaToFileOffset(va uint32) int64 {
 }
 
 // RawData returns slice of bytes ([]byte) which contains raw data of a section.
-// If SizeOfRawData in the section's header equals to 0, nil is returned.
 func (s *Section) RawData() []byte {
-	if s.rawData == nil {
-		return nil
-	}
-	bytes := make([]byte, len(s.rawData))
-	copy(bytes, s.rawData)
-	return bytes
-}
-
-func (s *Section) SetRawData(bytes []byte) {
-	s.rawData = make([]byte, len(bytes))
-	copy(s.rawData, bytes)
-	s.SizeOfRawData = uint32(len(bytes))
+	return s.rawData
 }
 
 func (s *Section) Relocations() []windef.Relocation {

@@ -34,7 +34,10 @@ func parseFile(t *testing.T, filename string) *File {
 	file := NewFile(binutil.WrapReaderAt(rawFile))
 	err = file.ReadAll()
 	if err != nil {
-		t.Errorf("Error occured while parsing file `%s`: %s", filename, err)
+		if fe, ok := err.(*FileError); ok {
+			err = fe.ToMultiError()
+		}
+		t.Errorf("Error occured while parsing file `%s`: %v", filename, err)
 		return nil
 	}
 	return file

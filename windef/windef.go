@@ -1,5 +1,12 @@
 package windef
 
+// Constant offsets within PE/COFF files
+const (
+	OFFSET_DOS_HEADER = 0 //If exists, DOS Header is always in the beggining of the file (MZ).
+
+	OFFSET_COFF_FILE_HEADER = 0 //MS COFF always begins with FileHeader
+)
+
 // Sizes
 const (
 	SIZEOF_IMAGE_DOS_HEADER            = 64

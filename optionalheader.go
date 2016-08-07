@@ -7,7 +7,7 @@ type OptionalHeader struct {
 	DataDirs DataDirs
 }
 
-func (oh *OptionalHeader) Generalize32(oh32 *windef.OptionalHeader32) {
+func (oh *OptionalHeader) From32(oh32 *windef.OptionalHeader32) {
 	oh.OptionalHeaderCommon = windef.OptionalHeaderCommon{
 		Magic:                       oh32.Magic,
 		MajorLinkerVersion:          oh32.MajorLinkerVersion,
@@ -43,7 +43,7 @@ func (oh *OptionalHeader) Generalize32(oh32 *windef.OptionalHeader32) {
 	}
 }
 
-func (oh *OptionalHeader) Generalize64(oh64 *windef.OptionalHeader64) {
+func (oh *OptionalHeader) From64(oh64 *windef.OptionalHeader64) {
 	oh.OptionalHeaderCommon = windef.OptionalHeaderCommon{
 		Magic:                       oh64.Magic,
 		MajorLinkerVersion:          oh64.MajorLinkerVersion,

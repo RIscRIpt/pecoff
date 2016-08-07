@@ -1,6 +1,10 @@
 package pecoff
 
-import "github.com/RIscRIpt/pecoff/windef"
+import (
+	"fmt"
+
+	"github.com/RIscRIpt/pecoff/windef"
+)
 
 // DdImports {{{1
 type DdImports struct {
@@ -24,7 +28,13 @@ func (i *DdImports) new() *Import {
 
 // append an Import returned from the method new
 func (i *DdImports) append(imp *Import) {
-	i.imports[imp.library] = imp
+	if prevImp, exists := i.imports[imp.library]; !exists {
+		i.imports[imp.library] = imp
+	} else {
+		// must not happen. Buf if it some how happens,
+		// it's better to merge import functions, rather than rewriting.
+		prevImp.merge(imp)
+	}
 }
 
 func (i *DdImports) Get() map[string]*Import {
@@ -81,6 +91,16 @@ func newImport(offset int64) *Import {
 	return &Import{
 		offset: offset,
 	}
+}
+
+func (i *Import) merge(other *Import) {
+	if i.library != other.library {
+		panic(fmt.Errorf(
+			"pecoff: merging imports from different libraries ('%s' and '%s')",
+			i.library, other.library,
+		))
+	}
+	i.functions = append(i.functions, other.functions...)
 }
 
 func (i *Import) Library() string {
