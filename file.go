@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
 
 	"github.com/RIscRIpt/pecoff/binutil"
 	"github.com/RIscRIpt/pecoff/windef"
@@ -37,6 +38,7 @@ var (
 	ErrFailReadSignature       = errors.New("pecoff: failed to read PE signature")
 	ErrFailReadFileHeader      = errors.New("pecoff: failed to read file header")
 	ErrFailReadOptHeader       = errors.New("pecoff: failed to read optional file header")
+	ErrFailReadStringTable     = errors.New("pecoff: failed to read string table")
 	ErrFailReadSectionsHeaders = errors.New("pecoff: failed to read headers of sections")
 	ErrFailReadSections        = errors.New("pecoff: failed to read sections")
 	ErrFailReadDataDirs        = errors.New("pecoff: failed to read data directories")
@@ -45,18 +47,20 @@ var (
 	ErrFailCheckDosHeader      = errors.New("pecoff: failed to check whether the file has DOS header")
 
 	// A group of errors which are to be formatted (used in errorf or wrapErrorf method)
-	ErrfFailVaToOff            = "pecoff: failed to convert VA (%08X) to file offset"      //fmt: VirtualAddress
-	ErrfFailGetSectByVA        = "pecoff: failed to find section which contains VA (%08X)" //fmt: VirtualAddress
-	ErrfOptHdrUnkSize          = "pecoff: optionalHeader has unexpected size (%d)"         //fmt: size
-	ErrfFailReadSectionHeader  = "pecoff: failed to read a header of section#%d (@%X)"     //fmt: sectionId, offset
-	ErrfFailReadSectionRawData = "pecoff: failed to read rawdata of section#%d (@%X)"      //fmt: sectionId, offset
-	ErrfFailReadImpDesc        = "pecoff: failed to read import descriptor#%d (@%X)"       //fmt: descriptorId, offset
-	ErrfFailReadLibName        = "pecoff: failed to read library name (%X)"                //fmt: nameVA
-	ErrfFailReadImpThunk       = "pecoff: failed to read import thunk (%X)"                //fmt: offset
-	ErrfFailReadImpThunkHint   = "pecoff: failed to read import thunk hint (@%X)"          //fmt: VirtualAddress
-	ErrfFailReadImpThunkName   = "pecoff: failed to read import thunk name (@%X)"          //fmt: VirtualAddress
-	ErrfFailReadBaseRel        = "pecoff: failed to read base relocation#%d (%X)"          //fmt: relocationId, offset
-	ErrfFailReadBaseRelEntries = "pecoff: failed to read base relocation#%d entries (%X)"  //fmt: relocationId, offset
+	ErrfFailVaToOff            = "pecoff: failed to convert VA (@%08X) to file offset"      //fmt: VirtualAddress
+	ErrfFailGetSectByVA        = "pecoff: failed to find section which contains VA (@%08X)" //fmt: VirtualAddress
+	ErrfOptHdrUnkSize          = "pecoff: optionalHeader has unexpected size (%d)"          //fmt: size
+	ErrfFailReadSectionHeader  = "pecoff: failed to read a header of section#%d (%X)"       //fmt: sectionId, offset
+	ErrfFailReadSectionRawData = "pecoff: failed to read rawdata of section#%d (%X)"        //fmt: sectionId, offset
+	ErrfFailReadStrTblSize     = "pecoff: failed to read string table size (%X)"            //fmt: offset
+	ErrfFailReadStrTbl         = "pecoff: failed to read string table (%X)"                 //fmt: offset
+	ErrfFailReadImpDesc        = "pecoff: failed to read import descriptor#%d (%X)"         //fmt: descriptorId, offset
+	ErrfFailReadLibName        = "pecoff: failed to read library name (@%08X)"              //fmt: nameVA
+	ErrfFailReadImpThunk       = "pecoff: failed to read import thunk (%X)"                 //fmt: offset
+	ErrfFailReadImpThunkHint   = "pecoff: failed to read import thunk hint (@%08X)"         //fmt: VirtualAddress
+	ErrfFailReadImpThunkName   = "pecoff: failed to read import thunk name (@%08X)"         //fmt: VirtualAddress
+	ErrfFailReadBaseRel        = "pecoff: failed to read base relocation#%d (%X)"           //fmt: relocationId, offset
+	ErrfFailReadBaseRelEntries = "pecoff: failed to read base relocation#%d entries (%X)"   //fmt: relocationId, offset
 )
 
 // End List of errors }}}1
@@ -69,9 +73,7 @@ type File struct {
 	FileHeader     *windef.FileHeader
 	OptionalHeader *OptionalHeader
 	Sections       Sections
-
-	// DebugErrors
-	DebugErrors bool
+	StringTable    *StringTable
 }
 
 // NewFile creates a new File object
@@ -104,7 +106,6 @@ func (f *File) wrapErrorf(innerError error, format string, a ...interface{}) err
 }
 
 // End File helper functions for error handling }}}1
-
 // === File binary readers === {{{1
 
 func (f *File) ReadVaInto(p interface{}, va uint32) error {
@@ -131,6 +132,12 @@ func (f *File) ReadAll() (err error) {
 	if err = f.ReadHeaders(); err != nil {
 		return f.wrapError(err, ErrFailReadHeaders)
 	}
+	if err = f.ReadStringTable(); err != nil {
+		return f.wrapError(err, ErrFailReadStringTable)
+	}
+	if err = f.ReadSectionsHeaders(); err != nil {
+		return f.wrapError(err, ErrFailReadSectionsHeaders)
+	}
 	if err = f.ReadSectionsRawData(); err != nil {
 		return f.wrapError(err, ErrFailReadSections)
 	}
@@ -145,6 +152,7 @@ func (f *File) WriteAll(out io.Writer) error {
 	panic("not implemented")
 }
 
+// === File offsets converters === {{{1
 // VaToOffset returns a file offset which points to
 // data pointed by `va` virtual address
 func (f *File) VaToOffset(va uint32) (int64, error) {
@@ -158,7 +166,9 @@ func (f *File) VaToOffset(va uint32) (int64, error) {
 	return s.VaToFileOffset(va), nil
 }
 
+// End File offsets converters }}}1
 // === File offsets getters === {{{1
+
 // GetFileHeaderOffset returns an offset to the FileHeader within PE file.
 // If DosHeader is nil (i.e. doesn't exists, or wasn't read), offset is
 // returned in terms of a COFF file.
@@ -176,6 +186,10 @@ func (f *File) getOptHeaderOffset() int64 {
 
 func (f *File) getSectionsHeadersOffset() int64 {
 	return f.getOptHeaderOffset() + int64(f.FileHeader.SizeOfOptionalHeader)
+}
+
+func (f *File) getStringTableOffset() int64 {
+	return int64(f.FileHeader.PointerToSymbolTable) + int64(f.FileHeader.NumberOfSymbols)*windef.SIZEOF_IMAGE_SYMBOL
 }
 
 // End File offsets getters }}}1
@@ -306,9 +320,6 @@ func (f *File) ReadHeaders() (err error) {
 			return f.wrapError(err, ErrFailReadOptHeader)
 		}
 	}
-	if err = f.ReadSectionsHeaders(); err != nil {
-		return f.wrapError(err, ErrFailReadSectionsHeaders)
-	}
 	return nil
 }
 
@@ -398,14 +409,19 @@ func (f *File) ReadSectionsHeaders() error {
 		for nullIndex < 8 && s.Name[nullIndex] != 0 {
 			nullIndex++
 		}
-		//if s.Name[0] == '/' {
-		//TODO: read a name of the section into a string, and
-		//      add support for sections names which are longer than 8chars
-		//      (contain a slash / and ASCII decimal offset in the string table)
-		//      For more info read PE/COFF file specification.
-		//} else {
 		s.nameString = string(s.Name[:nullIndex])
-		//}
+		if s.Name[0] == '/' && f.StringTable != nil {
+			// If section name contains garbage, just ignore it.
+			// So, if something fails here (err != nil),
+			// nothing critical happens can be safely ignored.
+			strTblOffset, err := strconv.Atoi(string(s.Name[1:nullIndex]))
+			if err == nil {
+				nameString, err := f.StringTable.GetString(uint32(strTblOffset))
+				if err == nil {
+					s.nameString = nameString
+				}
+			}
+		}
 		sections[i] = s
 	}
 	// Sort is required for efficient work of Sections.GetByVA method,
@@ -417,7 +433,7 @@ func (f *File) ReadSectionsHeaders() error {
 }
 
 // End File headers readers }}}1
-// === File Sections contents readers === {{{1
+// === File Sections contents reader === {{{1
 
 func (f *File) ReadSectionsRawData() error {
 	if f.Sections == nil {
@@ -435,7 +451,41 @@ func (f *File) ReadSectionsRawData() error {
 	return nil
 }
 
-// End File Sections contents readers }}}1
+// End File Sections contents reader }}}1
+// === File String table reader === {{{1
+
+func (f *File) ReadStringTable() error {
+	if f.FileHeader == nil {
+		return f.error(ErrNoFileHeader)
+	}
+	offset := f.getStringTableOffset()
+	// According to the Microsoft's PE/COFF file specification,
+	// symbols and string table *should* only exist in the COFF files.
+	// But some compilers of awesome languages (such as Go) ignore this fact,
+	// and still have symbols and string table in the PE (.exe) files.
+	// Also it's nothing told about if string table can exist w/o symbols, but
+	// this is important as calculation of the pointer to the string table is based
+	// on the FileHeader.PointerToSymbolTable and FileHeader.NumberOfSymbols.
+	// So if offset is 0, there are apparently no symbols and no string table.
+	if offset == 0 {
+		return nil
+	}
+	stringTable := new(StringTable)
+	if err := f.ReadAtInto(&stringTable.Size, offset); err != nil {
+		return f.wrapErrorf(err, ErrfFailReadStrTblSize, offset)
+	}
+	// size field includes it self,
+	// and pointers to the string table also take this field into account
+	// 4 byte overhead is not much anyway.
+	stringTable.Data = make([]byte, stringTable.Size)
+	if _, err := f.ReadAt(stringTable.Data, offset); err != nil {
+		return f.wrapErrorf(err, ErrfFailReadStrTbl, offset)
+	}
+	f.StringTable = stringTable
+	return nil
+}
+
+// End File Sections contents reader }}}1
 // === File DataDirectory readers === {{{1
 
 func (f *File) ReadDataDirs() error {

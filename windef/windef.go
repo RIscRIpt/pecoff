@@ -1,5 +1,8 @@
 package windef
 
+// Microsoft PE and COFF Specification:
+// https://msdn.microsoft.com/en-us/windows/hardware/gg463119.aspx
+
 // Constant offsets within PE/COFF files
 const (
 	OFFSET_DOS_HEADER = 0 //If exists, DOS Header is always in the beggining of the file (MZ).
@@ -16,6 +19,7 @@ const (
 	SIZEOF_IMAGE_DATA_DIRECTORY_HEADER = 8
 	SIZEOF_IMAGE_SECTION_HEADER        = 40
 	SIZEOF_IMAGE_RELOCATION            = 10
+	SIZEOF_IMAGE_SYMBOL                = 18
 	SIZEOF_IMAGE_IMPORT_DESCRIPTOR     = 20
 	SIZEOF_IMAGE_BASE_RELOCATION       = 8
 	SIZEOF_IMAGE_BASE_RELOCATION_ENTRY = 2
@@ -63,7 +67,7 @@ type (
 		Characteristics      uint16
 	}
 
-	// Complete OptionalHeader for 32bit images
+	// OptionalHeader for 32bit images
 	OptionalHeader32 struct {
 		Magic                       uint16
 		MajorLinkerVersion          uint8
@@ -134,37 +138,80 @@ type (
 
 	// Complete OptionalHeader which can be used to contain any of OptionalHeader (32/64bit)
 	OptionalHeaderCommon struct {
-		Magic                       uint16
-		MajorLinkerVersion          uint8
-		MinorLinkerVersion          uint8
-		SizeOfCode                  uint32
-		SizeOfInitializedData       uint32
-		SizeOfUninitializedData     uint32
-		AddressOfEntryPoint         uint32
-		BaseOfCode                  uint32
-		BaseOfData                  uint64
-		ImageBase                   uint64
-		SectionAlignment            uint32
-		FileAlignment               uint32
-		MajorOperatingSystemVersion uint16
-		MinorOperatingSystemVersion uint16
-		MajorImageVersion           uint16
-		MinorImageVersion           uint16
-		MajorSubsystemVersion       uint16
-		MinorSubsystemVersion       uint16
-		Win32VersionValue           uint32
-		SizeOfImage                 uint32
-		SizeOfHeaders               uint32
-		CheckSum                    uint32
-		Subsystem                   uint16
-		DllCharacteristics          uint16
-		SizeOfStackReserve          uint64
-		SizeOfStackCommit           uint64
-		SizeOfHeapReserve           uint64
-		SizeOfHeapCommit            uint64
-		LoaderFlags                 uint32
-		NumberOfRvaAndSizes         uint32
-		DataDirectory               [16]DataDirectory
+		Magic              uint16 // The unsigned integer that identifies the state of the image file.
+		MajorLinkerVersion uint8  // The linker major version number.
+		MinorLinkerVersion uint8  // The linker minor version number.
+
+		// Sizes of specific section, or the sum of all such sections if there are multiple such sections.
+		SizeOfCode              uint32 // The size of the code (text) section.
+		SizeOfInitializedData   uint32 // The size of the initialized data section.
+		SizeOfUninitializedData uint32 // The size of the uninitialized data section (BSS).
+
+		// The address of the entry point relative to the image base when the executable file is loaded into memory.
+		// For program images, this is the starting address. For device drivers, this is the address of the initialization function.
+		// An entry point is optional for DLLs. When no entry point is present, this field must be zero.
+		AddressOfEntryPoint uint32
+
+		// The address that is relative to the image base of the beginning-of-code/data section when it is loaded into memory.
+		BaseOfCode uint32
+		BaseOfData uint32
+
+		// The preferred address of the first byte of image when loaded into memory; must be a multiple of 64 K.
+		// The default for DLLs is 0x10000000.
+		// The default for Windows CE EXEs is 0x00010000.
+		// The default for Windows NT, Windows 2000, Windows XP, Windows 95, Windows 98, and Windows Me is 0x00400000.
+		ImageBase uint64
+
+		// The alignment (in bytes) of sections when they are loaded into memory.
+		// It must be greater than or equal to FileAlignment.
+		// The default is the page size for the architecture.
+		SectionAlignment uint32
+
+		// The alignment factor (in bytes) that is used to align the raw data of sections in the image file.
+		// The value should be a power of 2 between 512 and 64 K, inclusive. The default is 512.
+		// If the SectionAlignment is less than the architecture’s page size, then FileAlignment must match SectionAlignment.
+		FileAlignment uint32
+
+		MajorOperatingSystemVersion uint16 // The major version number of the required operating system.
+		MinorOperatingSystemVersion uint16 // The minor version number of the required operating system.
+		MajorImageVersion           uint16 // The major version number of the image.
+		MinorImageVersion           uint16 // The minor version number of the image.
+		MajorSubsystemVersion       uint16 // The major version number of the subsystem.
+		MinorSubsystemVersion       uint16 // The minor version number of the subsystem.
+		Win32VersionValue           uint32 // Reserved, must be zero.
+
+		// The size (in bytes) of the image, including all headers, as the image is loaded in memory.
+		// It must be a multiple of SectionAlignment.
+		SizeOfImage uint32
+
+		// The combined size of an MS‑DOS stub, PE header, and section headers rounded up to a multiple of FileAlignment.
+		SizeOfHeaders uint32
+
+		// The image file checksum. The algorithm for computing the checksum is incorporated into IMAGHELP.DLL.
+		// The following are checked for validation at load time: all drivers, any DLL loaded at boot time,
+		// and any DLL that is loaded into a critical Windows process.
+		CheckSum uint32
+
+		Subsystem          uint16 // The subsystem that is required to run this image.
+		DllCharacteristics uint16
+
+		// The size of the stack to reserve. Only SizeOfStackCommit is committed;
+		// the rest is made available one page at a time until the reserve size is reached.
+		SizeOfStackReserve uint64
+		SizeOfStackCommit  uint64 // The size of the stack to commit.
+
+		// The size of the local heap space to reserve. Only SizeOfHeapCommit is committed;
+		// the rest is made available one page at a time until the reserve size is reached.
+		SizeOfHeapReserve uint64
+		SizeOfHeapCommit  uint64 // The size of the local heap space to commit.
+
+		LoaderFlags uint32 // Reserved, must be zero.
+
+		// The number of data-directory entries in the remainder of the optional header.
+		// Each describes a location and size.
+		NumberOfRvaAndSizes uint32
+
+		DataDirectory [16]DataDirectory
 	}
 
 	// DataDirectory header
@@ -192,6 +239,37 @@ type (
 		Type             uint16
 	}
 
+	Symbol struct {
+		// The name of the symbol.
+		// If the name is longer than 8 bytes, first 4 bytes are set to zero
+		// and the remaining 4 represent an offset into the string table.
+		Name [8]uint8
+
+		// The value that is associated with the symbol.
+		// The interpretation of this field depends on SectionNumber and StorageClass.
+		// A typical meaning is the relocatable address.
+		Value uint32
+
+		// The signed integer that identifies the section,
+		// using a one-based index into the section table.
+		SectionNumber int16
+
+		// A number that represents type.
+		Type SymbolType
+
+		// An enumerated value that represents storage class.
+		StorageClass uint8
+
+		// The number of auxiliary symbol table entries that follow this record.
+		NumberOfAuxSymbols uint8
+	}
+
+	SymbolType struct {
+		Derived byte
+		Base    byte
+	}
+
+	// DataDirectory structures
 	ImportDescriptor struct {
 		OriginalFirstThunk uint32 // RVA to original unbound IAT (PIMAGE_THUNK_DATA)
 		Timestamp          uint32 // 0 if not bound, -1 if bound, and real date\time stamp in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND) O.W. date/time stamp of DLL bound to (Old BIND)
@@ -278,6 +356,12 @@ const (
 	IMAGE_NT_OPTIONAL_HDR64_MAGIC = 0x20b
 	IMAGE_ROM_OPTIONAL_HDR_MAGIC  = 0x107
 )
+
+var MAP_IMAGE_OPTIONAL_HDR_MAGIC = map[uint16]string{
+	IMAGE_NT_OPTIONAL_HDR32_MAGIC: "PE32",
+	IMAGE_NT_OPTIONAL_HDR64_MAGIC: "PE32+",
+	IMAGE_ROM_OPTIONAL_HDR_MAGIC:  "ROM",
+}
 
 // Subsystem values of an OptionalHeader
 const (
@@ -442,6 +526,79 @@ const (
 	IMAGE_REL_AMD64_SREL32   = 0x000E // 32 bit signed span-dependent value emitted into object
 	IMAGE_REL_AMD64_PAIR     = 0x000F
 	IMAGE_REL_AMD64_SSPAN32  = 0x0010 // 32 bit signed span-dependent value applied at link time
+)
+
+// Symbol SectionNumber field special values
+const (
+	// The symbol record is not yet assigned a section.
+	// A value of zero indicates that a reference to an external symbol is defined elsewhere.
+	// A value of non-zero is a common symbol with a size that is specified by the value.
+	IMAGE_SYM_UNDEFINED int16 = 0
+
+	// The symbol has an absolute (non-relocatable) value and is not an address.
+	IMAGE_SYM_ABSOLUTE = -1
+
+	// The symbol provides general type or debugging information but does not correspond to a section.
+	IMAGE_SYM_DEBUG = -2
+)
+
+// Symbol Type (SymbolType Base) field values
+const (
+	IMAGE_SYM_TYPE_NULL   byte = 0  // No type information or unknown base type.
+	IMAGE_SYM_TYPE_VOID        = 1  // No valid type; used with void pointers and functions
+	IMAGE_SYM_TYPE_CHAR        = 2  // A character (signed byte)
+	IMAGE_SYM_TYPE_SHORT       = 3  // A 2-byte signed integer
+	IMAGE_SYM_TYPE_INT         = 4  // A natural integer type (normally 4 bytes in Windows)
+	IMAGE_SYM_TYPE_LONG        = 5  // A 4-byte signed integer
+	IMAGE_SYM_TYPE_FLOAT       = 6  // A 4-byte floating-point number
+	IMAGE_SYM_TYPE_DOUBLE      = 7  // An 8-byte floating-point number
+	IMAGE_SYM_TYPE_STRUCT      = 8  // A structure
+	IMAGE_SYM_TYPE_UNION       = 9  // A union
+	IMAGE_SYM_TYPE_ENUM        = 10 // An enumerated type
+	IMAGE_SYM_TYPE_MOE         = 11 // A member of enumeration (a specific value)
+	IMAGE_SYM_TYPE_BYTE        = 12 // A byte; unsigned 1-byte integer
+	IMAGE_SYM_TYPE_WORD        = 13 // A word; unsigned 2-byte integer
+	IMAGE_SYM_TYPE_UINT        = 14 // An unsigned integer of natural size (normally, 4 bytes)
+	IMAGE_SYM_TYPE_DWORD       = 15 // An unsigned 4-byte integer
+)
+
+// Symbol Type (SymbolType Derived) field values
+const (
+	IMAGE_SYM_DTYPE_NULL     byte = 0 // No derived type; the symbol is a simple scalar variable.
+	IMAGE_SYM_DTYPE_POINTER       = 1 // The symbol is a pointer to base type.
+	IMAGE_SYM_DTYPE_FUNCTION      = 2 // The symbol is a function that returns a base type.
+	IMAGE_SYM_DTYPE_ARRAY         = 3 // The symbol is an array of base type.
+)
+
+// Symbol StorageClass field values
+const (
+	IMAGE_SYM_CLASS_NULL             uint8 = 0    // No assigned storage class.
+	IMAGE_SYM_CLASS_AUTOMATIC              = 1    // The automatic (stack) variable. The Value field specifies the stack frame offset.
+	IMAGE_SYM_CLASS_EXTERNAL               = 2    // A value that Microsoft tools use for external symbols. The Value field indicates the size if the section number is IMAGE_SYM_UNDEFINED (0). If the section number is not zero, then the Value field specifies the offset within the section.
+	IMAGE_SYM_CLASS_STATIC                 = 3    // The offset of the symbol within the section. If the Value field is zero, then the symbol represents a section name.
+	IMAGE_SYM_CLASS_REGISTER               = 4    // A register variable. The Value field specifies the register number.
+	IMAGE_SYM_CLASS_EXTERNAL_DEF           = 5    // A symbol that is defined externally.
+	IMAGE_SYM_CLASS_LABEL                  = 6    // A code label that is defined within the module. The Value field specifies the offset of the symbol within the section.
+	IMAGE_SYM_CLASS_UNDEFINED_LABEL        = 7    // A reference to a code label that is not defined.
+	IMAGE_SYM_CLASS_MEMBER_OF_STRUCT       = 8    // The structure member. The Value field specifies the nth member.
+	IMAGE_SYM_CLASS_ARGUMENT               = 9    // A formal argument (parameter) of a function. The Value field specifies the nth argument.
+	IMAGE_SYM_CLASS_STRUCT_TAG             = 10   // The structure tag-name entry.
+	IMAGE_SYM_CLASS_MEMBER_OF_UNION        = 11   // A union member. The Value field specifies the nth member.
+	IMAGE_SYM_CLASS_UNION_TAG              = 12   // The Union tag-name entry.
+	IMAGE_SYM_CLASS_TYPE_DEFINITION        = 13   // A Typedef entry.
+	IMAGE_SYM_CLASS_UNDEFINED_STATIC       = 14   // A static data declaration.
+	IMAGE_SYM_CLASS_ENUM_TAG               = 15   // An enumerated type tagname entry.
+	IMAGE_SYM_CLASS_MEMBER_OF_ENUM         = 16   // A member of an enumeration. The Value field specifies the nth member.
+	IMAGE_SYM_CLASS_REGISTER_PARAM         = 17   // A register parameter.
+	IMAGE_SYM_CLASS_BIT_FIELD              = 18   // A bit-field reference. The Value field specifies the nth bit in the bit field.
+	IMAGE_SYM_CLASS_BLOCK                  = 100  // A .bb (beginning of block) or .eb (end of block) record. The Value field is the relocatable address of the code location.
+	IMAGE_SYM_CLASS_FUNCTION               = 101  // A value that Microsoft tools use for symbol records that define the extent of a function: begin function (.bf), end function (.ef), and lines in function (.lf). For .lf records, the Value field gives the number of source lines in the function. For .ef records, the Value field gives the size of the function code.
+	IMAGE_SYM_CLASS_END_OF_STRUCT          = 102  // An end-of-structure entry.
+	IMAGE_SYM_CLASS_FILE                   = 103  // A value that Microsoft tools, as well as traditional COFF format, use for the source-file symbol record. The symbol is followed by auxiliary records that name the file.
+	IMAGE_SYM_CLASS_SECTION                = 104  // A definition of a section (Microsoft tools use STATIC storage class instead).
+	IMAGE_SYM_CLASS_WEAK_EXTERNAL          = 105  // A weak external. For more information, see section 5.5.3, “Auxiliary Format 3: Weak Externals.”
+	IMAGE_SYM_CLASS_CLR_TOKEN              = 107  // A CLR token symbol. The name is an ASCII string that consists of the hexadecimal value of the token. For more information, see section 5.5.7, “CLR Token Definition (Object Only).”
+	IMAGE_SYM_CLASS_END_OF_FUNCTION  uint8 = 0xFF // A special symbol that represents the end of function, for debugging purposes.
 )
 
 // Base relocations

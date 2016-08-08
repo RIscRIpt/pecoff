@@ -34,6 +34,13 @@ func (e *FileError) ToMultiError() (list MultiError) {
 	return
 }
 
+func ErrorFlatten(err error) error {
+	if fe, ok := err.(*FileError); ok {
+		return fe.ToMultiError()
+	}
+	return err
+}
+
 type MultiError []error
 
 func (e MultiError) Error() string {
