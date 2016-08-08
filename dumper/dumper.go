@@ -46,6 +46,20 @@ func (fd *FileDumper) dump(format string, a ...interface{}) {
 func (fd *FileDumper) DumpAll() {
 	fd.DumpHeaders()
 
+	fd.dump("Sections' Relocations:\n")
+	fd.indent()
+	fd.DumpSectionsRelocations()
+	fd.unindent()
+	fd.dump("\n")
+
+	if fd.File.OptionalHeader != nil {
+		fd.dump("DataDirectories:\n")
+		fd.indent()
+		fd.DumpDataDirectories()
+		fd.unindent()
+		fd.dump("\n")
+	}
+
 	fd.dump("StringTable:\n")
 	fd.indent()
 	fd.DumpStringTable()
@@ -54,35 +68,37 @@ func (fd *FileDumper) DumpAll() {
 }
 
 func (fd *FileDumper) DumpHeaders() {
-	fd.dump("DosHeader:\n")
-	fd.indent()
-	fd.DumpDosHeader()
-	fd.unindent()
-	fd.dump("\n")
+	if fd.File.DosHeader != nil {
+		fd.dump("DosHeader:\n")
+		fd.indent()
+		fd.DumpDosHeader()
+		fd.unindent()
+		fd.dump("\n")
+	}
 
-	fd.dump("FileHeader:\n")
-	fd.indent()
-	fd.DumpFileHeader()
-	fd.unindent()
-	fd.dump("\n")
+	if fd.File.FileHeader != nil {
+		fd.dump("FileHeader:\n")
+		fd.indent()
+		fd.DumpFileHeader()
+		fd.unindent()
+		fd.dump("\n")
+	}
 
-	fd.dump("OptionalHeader:\n")
-	fd.indent()
-	fd.DumpOptionalHeader()
-	fd.unindent()
-	fd.dump("\n")
+	if fd.File.OptionalHeader != nil {
+		fd.dump("OptionalHeader:\n")
+		fd.indent()
+		fd.DumpOptionalHeader()
+		fd.unindent()
+		fd.dump("\n")
+	}
 
-	fd.dump("SectionsHeaders:\n")
-	fd.indent()
-	fd.DumpSectionsHeaders()
-	fd.unindent()
-	fd.dump("\n")
-
-	fd.dump("DataDirectories:\n")
-	fd.indent()
-	fd.DumpDataDirectories()
-	fd.unindent()
-	fd.dump("\n")
+	if fd.File.Sections != nil {
+		fd.dump("Sections' Headers:\n")
+		fd.indent()
+		fd.DumpSectionsHeaders()
+		fd.unindent()
+		fd.dump("\n")
+	}
 }
 
 func (fd *FileDumper) DumpDosHeader() {
@@ -324,7 +340,7 @@ func (fd *FileDumper) DumpSectionsHeaders() {
 		return
 	}
 	for i, s := range fd.File.Sections {
-		fd.dump("Section #%d\n", i)
+		fd.dump("Section #%d\n", i+1)
 		fd.indent()
 		nullIndex := bytes.IndexByte(s.Name[:], 0)
 		if nullIndex == -1 {
@@ -437,6 +453,38 @@ func (fd *FileDumper) DumpSectionsHeaders() {
 			fd.dump("ALIGN_8192BYTES\n")
 		}
 		fd.unindent()
+		fd.unindent()
+		fd.dump("\n")
+	}
+}
+
+func (fd *FileDumper) sectRelTypeName(t uint16) (name string) {
+	name = "Unknown"
+	switch fd.File.FileHeader.Machine {
+	case windef.IMAGE_FILE_MACHINE_I386:
+		name, _ = windef.MAP_IMAGE_REL_I386[t]
+	case windef.IMAGE_FILE_MACHINE_AMD64:
+		name, _ = windef.MAP_IMAGE_REL_AMD64[t]
+	}
+	return
+}
+
+func (fd *FileDumper) DumpSectionsRelocations() {
+	if fd.File.Sections == nil {
+		return
+	}
+	for i, s := range fd.File.Sections {
+		relocations := s.Relocations()
+		if len(relocations) == 0 {
+			continue
+		}
+		fd.dump("Section #%d\n", i)
+		fd.indent()
+		for j := range relocations {
+			fd.dump("VirtualAddress   %08X\n", relocations[j].VirtualAddress)
+			fd.dump("SymbolTableIndex %08X\n", relocations[j].SymbolTableIndex)
+			fd.dump("Type             %04X     (%s)\n", relocations[j].Type, fd.sectRelTypeName(relocations[j].Type))
+		}
 		fd.unindent()
 		fd.dump("\n")
 	}
