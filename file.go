@@ -73,7 +73,7 @@ type File struct {
 	FileHeader     *windef.FileHeader
 	OptionalHeader *OptionalHeader
 	Sections       Sections
-	StringTable    *StringTable
+	StringTable    StringTable
 }
 
 // NewFile creates a new File object
@@ -416,7 +416,7 @@ func (f *File) ReadSectionsHeaders() error {
 			// nothing critical happens can be safely ignored.
 			strTblOffset, err := strconv.Atoi(string(s.Name[1:nullIndex]))
 			if err == nil {
-				nameString, err := f.StringTable.GetString(uint32(strTblOffset))
+				nameString, err := f.StringTable.GetString(strTblOffset)
 				if err == nil {
 					s.nameString = nameString
 				}
@@ -470,18 +470,15 @@ func (f *File) ReadStringTable() error {
 	if offset == 0 {
 		return nil
 	}
-	stringTable := new(StringTable)
-	if err := f.ReadAtInto(&stringTable.Size, offset); err != nil {
+	var size uint32
+	if err := f.ReadAtInto(&size, offset); err != nil {
 		return f.wrapErrorf(err, ErrfFailReadStrTblSize, offset)
 	}
-	// size field includes it self,
-	// and pointers to the string table also take this field into account
-	// 4 byte overhead is not much anyway.
-	stringTable.Data = make([]byte, stringTable.Size)
-	if _, err := f.ReadAt(stringTable.Data, offset); err != nil {
+	table := make([]byte, size)
+	if _, err := f.ReadAt(table, offset); err != nil {
 		return f.wrapErrorf(err, ErrfFailReadStrTbl, offset)
 	}
-	f.StringTable = stringTable
+	f.StringTable = table
 	return nil
 }
 
