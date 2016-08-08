@@ -4,9 +4,9 @@ import "github.com/RIscRIpt/pecoff/windef"
 
 type Section struct {
 	windef.SectionHeader
-	nameString string
-	rawData    []byte
-	//relocations []windef.Relocation
+	nameString  string
+	rawData     []byte
+	relocations []windef.Relocation
 }
 
 func (s *Section) NameString() string {
@@ -27,7 +27,7 @@ func (s *Section) RawData() []byte {
 }
 
 func (s *Section) Relocations() []windef.Relocation {
-	panic("Not implemented")
+	return s.relocations
 }
 
 // func (s *Section) ApplyBaseRelocation(baseDest, baseSrc uint32, relocation BaseRelocation) {

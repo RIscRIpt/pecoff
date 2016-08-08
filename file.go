@@ -6,6 +6,7 @@ import (
 	"io"
 	"sort"
 	"strconv"
+	"unsafe"
 
 	"github.com/RIscRIpt/pecoff/binutil"
 	"github.com/RIscRIpt/pecoff/windef"
@@ -38,9 +39,12 @@ var (
 	ErrFailReadSignature       = errors.New("pecoff: failed to read PE signature")
 	ErrFailReadFileHeader      = errors.New("pecoff: failed to read file header")
 	ErrFailReadOptHeader       = errors.New("pecoff: failed to read optional file header")
+	ErrFailReadSymbols         = errors.New("pecoff: failed to read symbols")
 	ErrFailReadStringTable     = errors.New("pecoff: failed to read string table")
 	ErrFailReadSectionsHeaders = errors.New("pecoff: failed to read headers of sections")
-	ErrFailReadSections        = errors.New("pecoff: failed to read sections")
+	ErrFailReadSectionsData    = errors.New("pecoff: failed to read sections raw data")
+	ErrFailReadSectionsRelocs  = errors.New("pecoff: failed to read relocations of sections")
+	ErrFailReadSectionsLineNrs = errors.New("pecoff: failed to read line numbers of sections")
 	ErrFailReadDataDirs        = errors.New("pecoff: failed to read data directories")
 	ErrFailReadImports         = errors.New("pecoff: failed to read imports data directory")
 	ErrFailReadBaseRelocs      = errors.New("pecoff: failed to read base relocations data directory")
@@ -52,6 +56,8 @@ var (
 	ErrfOptHdrUnkSize          = "pecoff: optionalHeader has unexpected size (%d)"          //fmt: size
 	ErrfFailReadSectionHeader  = "pecoff: failed to read a header of section#%d (%X)"       //fmt: sectionId, offset
 	ErrfFailReadSectionRawData = "pecoff: failed to read rawdata of section#%d (%X)"        //fmt: sectionId, offset
+	ErrfFailReadSectionReloc   = "pecoff: failed to read relocation#%d of section #%d (%X)" //fmt: relocationId, sectionId, offset
+	ErrfFailReadSymbol         = "pecoff: failed to read symbol#%d (%X)"                    //fmt: symbolId, offset
 	ErrfFailReadStrTblSize     = "pecoff: failed to read string table size (%X)"            //fmt: offset
 	ErrfFailReadStrTbl         = "pecoff: failed to read string table (%X)"                 //fmt: offset
 	ErrfFailReadImpDesc        = "pecoff: failed to read import descriptor#%d (%X)"         //fmt: descriptorId, offset
@@ -73,6 +79,7 @@ type File struct {
 	FileHeader     *windef.FileHeader
 	OptionalHeader *OptionalHeader
 	Sections       Sections
+	Symbols        Symbols
 	StringTable    StringTable
 }
 
@@ -135,14 +142,25 @@ func (f *File) ReadAll() (err error) {
 	if err = f.ReadStringTable(); err != nil {
 		return f.wrapError(err, ErrFailReadStringTable)
 	}
+	if err = f.ReadSymbols(); err != nil {
+		return f.wrapError(err, ErrFailReadSymbols)
+	}
 	if err = f.ReadSectionsHeaders(); err != nil {
 		return f.wrapError(err, ErrFailReadSectionsHeaders)
 	}
 	if err = f.ReadSectionsRawData(); err != nil {
-		return f.wrapError(err, ErrFailReadSections)
+		return f.wrapError(err, ErrFailReadSectionsData)
 	}
-	if err = f.ReadDataDirs(); err != nil {
-		return f.wrapError(err, ErrFailReadDataDirs)
+	if err = f.ReadSectionsRelocations(); err != nil {
+		return f.wrapError(err, ErrFailReadSectionsRelocs)
+	}
+	if err = f.ReadSectionsLineNumbers(); err != nil {
+		return f.wrapError(err, ErrFailReadSectionsLineNrs)
+	}
+	if f.OptionalHeader != nil {
+		if err = f.ReadDataDirs(); err != nil {
+			return f.wrapError(err, ErrFailReadDataDirs)
+		}
 	}
 	return
 }
@@ -401,7 +419,7 @@ func (f *File) ReadSectionsHeaders() error {
 	baseOffset := f.getSectionsHeadersOffset()
 	for i := range sections {
 		s := new(Section)
-		offset := baseOffset + int64(i*windef.SIZEOF_IMAGE_SECTION_HEADER)
+		offset := baseOffset + int64(i)*windef.SIZEOF_IMAGE_SECTION_HEADER
 		if err := f.ReadAtInto(&s.SectionHeader, offset); err != nil {
 			return f.wrapErrorf(err, ErrfFailReadSectionHeader, i, offset)
 		}
@@ -433,7 +451,7 @@ func (f *File) ReadSectionsHeaders() error {
 }
 
 // End File headers readers }}}1
-// === File Sections contents reader === {{{1
+// === File Sections readers === {{{1
 
 func (f *File) ReadSectionsRawData() error {
 	if f.Sections == nil {
@@ -451,7 +469,69 @@ func (f *File) ReadSectionsRawData() error {
 	return nil
 }
 
-// End File Sections contents reader }}}1
+func (f *File) ReadSectionsRelocations() error {
+	if f.Sections == nil {
+		return f.error(ErrNoSectionsHeaders)
+	}
+	for i, s := range f.Sections {
+		relocations := make([]windef.Relocation, s.NumberOfRelocations)
+		for j := range relocations {
+			offset := int64(s.PointerToRelocations) + int64(j)*windef.SIZEOF_IMAGE_RELOCATION
+			if err := f.ReadAtInto(&relocations[j], offset); err != nil {
+				return f.wrapErrorf(err, ErrfFailReadSectionReloc, j, i, offset)
+			}
+		}
+		s.relocations = relocations
+	}
+	return nil
+}
+
+func (f *File) ReadSectionsLineNumbers() error {
+	if f.Sections == nil {
+		return f.error(ErrNoSectionsHeaders)
+	}
+	return nil
+}
+
+// End File Sections readers }}}1
+// === File Symbols reader === {{{1
+
+func (f *File) ReadSymbols() error {
+	if f.FileHeader == nil {
+		return f.error(ErrNoFileHeader)
+	}
+	symbols := make(Symbols, int(f.FileHeader.NumberOfSymbols))
+	baseOffset := int64(f.FileHeader.PointerToSymbolTable)
+	for i := range symbols {
+		s := new(Symbol)
+		offset := baseOffset + int64(i)*windef.SIZEOF_IMAGE_SYMBOL
+		if err := f.ReadAtInto(&s.Symbol, offset); err != nil {
+			return f.wrapErrorf(err, ErrfFailReadSymbol, i, offset)
+		}
+		// If the name is longer than 8 bytes, first 4 bytes are set to zero
+		// and the remaining 4 represent an offset into the string table.
+		if *(*uint32)(unsafe.Pointer(&s.Name[0])) == 0 {
+			strTblOffset := int(*(*uint32)(unsafe.Pointer(&s.Name[4])))
+			nameString, err := f.StringTable.GetString(strTblOffset)
+			if err == nil {
+				s.nameString = nameString
+			} else {
+				s.nameString = fmt.Sprintf("/%d", strTblOffset)
+			}
+		} else {
+			nullIndex := 0
+			for nullIndex < 8 && s.Name[nullIndex] != 0 {
+				nullIndex++
+			}
+			s.nameString = string(s.Name[:nullIndex])
+		}
+		symbols[i] = s
+	}
+	f.Symbols = symbols
+	return nil
+}
+
+// End File Symbols reader }}}1
 // === File String table reader === {{{1
 
 func (f *File) ReadStringTable() error {

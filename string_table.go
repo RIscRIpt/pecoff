@@ -9,7 +9,7 @@ var (
 )
 
 func (t StringTable) GetString(offset int) (string, error) {
-	if offset > 0 && offset < len(t) {
+	if offset >= 0 && offset < len(t) {
 		nullIndex := offset
 		// all strings must be null-terminated,
 		// but we don't want to crash unexpectedly,

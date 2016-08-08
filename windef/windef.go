@@ -265,8 +265,8 @@ type (
 	}
 
 	SymbolType struct {
-		Derived byte
 		Base    byte
+		Derived byte
 	}
 
 	// DataDirectory structures
@@ -576,6 +576,12 @@ const (
 	IMAGE_SYM_DEBUG = -2
 )
 
+var MAP_IMAGE_SYM_NUMBER = map[int16]string{
+	IMAGE_SYM_UNDEFINED: "UNDEFINED",
+	IMAGE_SYM_ABSOLUTE:  "ABSOLUTE",
+	IMAGE_SYM_DEBUG:     "DEBUG",
+}
+
 // Symbol Type (SymbolType Base) field values
 const (
 	IMAGE_SYM_TYPE_NULL   byte = 0  // No type information or unknown base type.
@@ -596,6 +602,25 @@ const (
 	IMAGE_SYM_TYPE_DWORD       = 15 // An unsigned 4-byte integer
 )
 
+var MAP_IMAGE_SYM_TYPE = [...]string{
+	/* IMAGE_SYM_TYPE_NULL   */ "NULL",
+	/* IMAGE_SYM_TYPE_VOID   */ "VOID",
+	/* IMAGE_SYM_TYPE_CHAR   */ "CHAR",
+	/* IMAGE_SYM_TYPE_SHORT  */ "SHORT",
+	/* IMAGE_SYM_TYPE_INT    */ "INT",
+	/* IMAGE_SYM_TYPE_LONG   */ "LONG",
+	/* IMAGE_SYM_TYPE_FLOAT  */ "FLOAT",
+	/* IMAGE_SYM_TYPE_DOUBLE */ "DOUBLE",
+	/* IMAGE_SYM_TYPE_STRUCT */ "STRUCT",
+	/* IMAGE_SYM_TYPE_UNION  */ "UNION",
+	/* IMAGE_SYM_TYPE_ENUM   */ "ENUM",
+	/* IMAGE_SYM_TYPE_MOE    */ "MOE",
+	/* IMAGE_SYM_TYPE_BYTE   */ "BYTE",
+	/* IMAGE_SYM_TYPE_WORD   */ "WORD",
+	/* IMAGE_SYM_TYPE_UINT   */ "UINT",
+	/* IMAGE_SYM_TYPE_DWORD  */ "DWORD",
+}
+
 // Symbol Type (SymbolType Derived) field values
 const (
 	IMAGE_SYM_DTYPE_NULL     byte = 0 // No derived type; the symbol is a simple scalar variable.
@@ -603,6 +628,13 @@ const (
 	IMAGE_SYM_DTYPE_FUNCTION      = 2 // The symbol is a function that returns a base type.
 	IMAGE_SYM_DTYPE_ARRAY         = 3 // The symbol is an array of base type.
 )
+
+var MAP_IMAGE_SYM_DTYPE = [...]string{
+	/* IMAGE_SYM_DTYPE_NULL     */ "NULL",
+	/* IMAGE_SYM_DTYPE_POINTER  */ "POINTER",
+	/* IMAGE_SYM_DTYPE_FUNCTION */ "FUNCTION",
+	/* IMAGE_SYM_DTYPE_ARRAY    */ "ARRAY",
+}
 
 // Symbol StorageClass field values
 const (
@@ -634,6 +666,36 @@ const (
 	IMAGE_SYM_CLASS_CLR_TOKEN              = 107  // A CLR token symbol. The name is an ASCII string that consists of the hexadecimal value of the token. For more information, see section 5.5.7, “CLR Token Definition (Object Only).”
 	IMAGE_SYM_CLASS_END_OF_FUNCTION  uint8 = 0xFF // A special symbol that represents the end of function, for debugging purposes.
 )
+
+var MAP_IMAGE_SYM_CLASS = map[uint8]string{
+	IMAGE_SYM_CLASS_NULL:             "NULL",
+	IMAGE_SYM_CLASS_AUTOMATIC:        "AUTOMATIC",
+	IMAGE_SYM_CLASS_EXTERNAL:         "EXTERNAL",
+	IMAGE_SYM_CLASS_STATIC:           "STATIC",
+	IMAGE_SYM_CLASS_REGISTER:         "REGISTER",
+	IMAGE_SYM_CLASS_EXTERNAL_DEF:     "EXTERNAL_DEF",
+	IMAGE_SYM_CLASS_LABEL:            "LABEL",
+	IMAGE_SYM_CLASS_UNDEFINED_LABEL:  "UNDEFINED_LABEL",
+	IMAGE_SYM_CLASS_MEMBER_OF_STRUCT: "MEMBER_OF_STRUCT",
+	IMAGE_SYM_CLASS_ARGUMENT:         "ARGUMENT",
+	IMAGE_SYM_CLASS_STRUCT_TAG:       "STRUCT_TAG",
+	IMAGE_SYM_CLASS_MEMBER_OF_UNION:  "MEMBER_OF_UNION",
+	IMAGE_SYM_CLASS_UNION_TAG:        "UNION_TAG",
+	IMAGE_SYM_CLASS_TYPE_DEFINITION:  "TYPE_DEFINITION",
+	IMAGE_SYM_CLASS_UNDEFINED_STATIC: "UNDEFINED_STATIC",
+	IMAGE_SYM_CLASS_ENUM_TAG:         "ENUM_TAG",
+	IMAGE_SYM_CLASS_MEMBER_OF_ENUM:   "MEMBER_OF_ENUM",
+	IMAGE_SYM_CLASS_REGISTER_PARAM:   "REGISTER_PARAM",
+	IMAGE_SYM_CLASS_BIT_FIELD:        "BIT_FIELD",
+	IMAGE_SYM_CLASS_BLOCK:            "BLOCK",
+	IMAGE_SYM_CLASS_FUNCTION:         "FUNCTION",
+	IMAGE_SYM_CLASS_END_OF_STRUCT:    "END_OF_STRUCT",
+	IMAGE_SYM_CLASS_FILE:             "FILE",
+	IMAGE_SYM_CLASS_SECTION:          "SECTION",
+	IMAGE_SYM_CLASS_WEAK_EXTERNAL:    "WEAK_EXTERNAL",
+	IMAGE_SYM_CLASS_CLR_TOKEN:        "CLR_TOKEN",
+	IMAGE_SYM_CLASS_END_OF_FUNCTION:  "END_OF_FUNCTION",
+}
 
 // Base relocations
 const (

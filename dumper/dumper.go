@@ -2,6 +2,7 @@ package dumper
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"time"
@@ -60,11 +61,20 @@ func (fd *FileDumper) DumpAll() {
 		fd.dump("\n")
 	}
 
-	fd.dump("StringTable:\n")
-	fd.indent()
-	fd.DumpStringTable()
-	fd.unindent()
-	fd.dump("\n")
+	if fd.File.Symbols != nil {
+		fd.dump("Symbols:\n")
+		fd.indent()
+		fd.DumpSymbols()
+		fd.unindent()
+		fd.dump("\n")
+	}
+	if fd.File.StringTable != nil {
+		fd.dump("StringTable:\n")
+		fd.indent()
+		fd.DumpStringTable()
+		fd.unindent()
+		fd.dump("\n")
+	}
 }
 
 func (fd *FileDumper) DumpHeaders() {
@@ -105,26 +115,26 @@ func (fd *FileDumper) DumpDosHeader() {
 	if fd.File.DosHeader == nil {
 		return
 	}
-	fd.dump("e_magic    %04X      Magic number                    \n", fd.File.DosHeader.E_magic)
-	fd.dump("e_cblp     %04X      Bytes on last page of file      \n", fd.File.DosHeader.E_cblp)
-	fd.dump("e_cp       %04X      Pages in file                   \n", fd.File.DosHeader.E_cp)
-	fd.dump("e_crlc     %04X      Relocations                     \n", fd.File.DosHeader.E_crlc)
-	fd.dump("e_cparhdr  %04X      Size of header in paragraphs    \n", fd.File.DosHeader.E_cparhdr)
-	fd.dump("e_minalloc %04X      Minimum extra paragraphs needed \n", fd.File.DosHeader.E_minalloc)
-	fd.dump("e_maxalloc %04X      Maximum extra paragraphs needed \n", fd.File.DosHeader.E_maxalloc)
-	fd.dump("e_ss       %04X      Initial (relative) SS value     \n", fd.File.DosHeader.E_ss)
-	fd.dump("e_sp       %04X      Initial SP value                \n", fd.File.DosHeader.E_sp)
-	fd.dump("e_csum     %04X      Checksum                        \n", fd.File.DosHeader.E_csum)
-	fd.dump("e_ip       %04X      Initial IP value                \n", fd.File.DosHeader.E_ip)
-	fd.dump("e_cs       %04X      Initial (relative) CS value     \n", fd.File.DosHeader.E_cs)
-	fd.dump("e_lfarlc   %04X      File address of relocation table\n", fd.File.DosHeader.E_lfarlc)
-	fd.dump("e_ovno     %04X      Overlay number                  \n", fd.File.DosHeader.E_ovno)
-	fd.dump("e_res[4]             Reserved words                  \n")
+	fd.dump("e_magic        %04X Magic number                    \n", fd.File.DosHeader.E_magic)
+	fd.dump("e_cblp         %04X Bytes on last page of file      \n", fd.File.DosHeader.E_cblp)
+	fd.dump("e_cp           %04X Pages in file                   \n", fd.File.DosHeader.E_cp)
+	fd.dump("e_crlc         %04X Relocations                     \n", fd.File.DosHeader.E_crlc)
+	fd.dump("e_cparhdr      %04X Size of header in paragraphs    \n", fd.File.DosHeader.E_cparhdr)
+	fd.dump("e_minalloc     %04X Minimum extra paragraphs needed \n", fd.File.DosHeader.E_minalloc)
+	fd.dump("e_maxalloc     %04X Maximum extra paragraphs needed \n", fd.File.DosHeader.E_maxalloc)
+	fd.dump("e_ss           %04X Initial (relative) SS value     \n", fd.File.DosHeader.E_ss)
+	fd.dump("e_sp           %04X Initial SP value                \n", fd.File.DosHeader.E_sp)
+	fd.dump("e_csum         %04X Checksum                        \n", fd.File.DosHeader.E_csum)
+	fd.dump("e_ip           %04X Initial IP value                \n", fd.File.DosHeader.E_ip)
+	fd.dump("e_cs           %04X Initial (relative) CS value     \n", fd.File.DosHeader.E_cs)
+	fd.dump("e_lfarlc       %04X File address of relocation table\n", fd.File.DosHeader.E_lfarlc)
+	fd.dump("e_ovno         %04X Overlay number                  \n", fd.File.DosHeader.E_ovno)
+	fd.dump("e_res[4]            Reserved words                  \n")
 	for _, v := range fd.File.DosHeader.E_res {
-		fd.dump("           %04X\n", v)
+		fd.dump("               %04X\n", v)
 	}
-	fd.dump("e_oemid    %04X     OEM identifier (for e_oeminfo)   \n", fd.File.DosHeader.E_oemid)
-	fd.dump("e_oeminfo  %04X     OEM information; e_oemid specific\n", fd.File.DosHeader.E_oeminfo)
+	fd.dump("e_oemid        %04X OEM identifier (for e_oeminfo)   \n", fd.File.DosHeader.E_oemid)
+	fd.dump("e_oeminfo      %04X OEM information; e_oemid specific\n", fd.File.DosHeader.E_oeminfo)
 	fd.dump("e_res2[10]          Reserved words                   \n")
 	for _, v := range fd.File.DosHeader.E_res2 {
 		fd.dump("           %04X\n", v)
@@ -141,13 +151,13 @@ func (fd *FileDumper) DumpFileHeader() {
 		MachineString = windef.MAP_IMAGE_FILE_MACHINE[windef.IMAGE_FILE_MACHINE_UNKNOWN]
 	}
 	TimeDateStamp := time.Unix(int64(fd.File.FileHeader.TimeDateStamp), 0)
-	fd.dump("Machine              %04X     (%s)\n", fd.File.FileHeader.Machine, MachineString)
-	fd.dump("NumberOfSections     %04X\n", fd.File.FileHeader.NumberOfSections)
+	fd.dump("Machine                  %04X     (%s)\n", fd.File.FileHeader.Machine, MachineString)
+	fd.dump("NumberOfSections         %04X\n", fd.File.FileHeader.NumberOfSections)
 	fd.dump("TimeDateStamp        %08X (%s)\n", fd.File.FileHeader.TimeDateStamp, TimeDateStamp)
 	fd.dump("PointerToSymbolTable %08X\n", fd.File.FileHeader.PointerToSymbolTable)
 	fd.dump("NumberOfSymbols      %08X\n", fd.File.FileHeader.NumberOfSymbols)
-	fd.dump("SizeOfOptionalHeader %04X\n", fd.File.FileHeader.SizeOfOptionalHeader)
-	fd.dump("Characteristics      %04X\n", fd.File.FileHeader.Characteristics)
+	fd.dump("SizeOfOptionalHeader     %04X\n", fd.File.FileHeader.SizeOfOptionalHeader)
+	fd.dump("Characteristics          %04X\n", fd.File.FileHeader.Characteristics)
 	fd.indent()
 	if fd.File.FileHeader.Characteristics&windef.IMAGE_FILE_RELOCS_STRIPPED != 0 {
 		fd.dump("RELOCS_STRIPPED             Relocation info stripped from file.\n")
@@ -206,41 +216,41 @@ func (fd *FileDumper) DumpOptionalHeader() {
 	if !ok {
 		magicString = "Unknown"
 	}
-	fd.dump("Magic                       %04X             (%s)\n", fd.File.OptionalHeader.Magic, magicString)
-	fd.dump("MajorLinkerVersion          %02X\n", fd.File.OptionalHeader.MajorLinkerVersion)
-	fd.dump("MinorLinkerVersion          %02X\n", fd.File.OptionalHeader.MinorLinkerVersion)
-	fd.dump("SizeOfCode                  %08X\n", fd.File.OptionalHeader.SizeOfCode)
-	fd.dump("SizeOfInitializedData       %08X\n", fd.File.OptionalHeader.SizeOfInitializedData)
-	fd.dump("SizeOfUninitializedData     %08X\n", fd.File.OptionalHeader.SizeOfUninitializedData)
-	fd.dump("AddressOfEntryPoint         %08X\n", fd.File.OptionalHeader.AddressOfEntryPoint)
-	fd.dump("BaseOfCode                  %08X\n", fd.File.OptionalHeader.BaseOfCode)
+	fd.dump("Magic                                   %04X             (%s)\n", fd.File.OptionalHeader.Magic, magicString)
+	fd.dump("MajorLinkerVersion                        %02X\n", fd.File.OptionalHeader.MajorLinkerVersion)
+	fd.dump("MinorLinkerVersion                        %02X\n", fd.File.OptionalHeader.MinorLinkerVersion)
+	fd.dump("SizeOfCode                          %08X\n", fd.File.OptionalHeader.SizeOfCode)
+	fd.dump("SizeOfInitializedData               %08X\n", fd.File.OptionalHeader.SizeOfInitializedData)
+	fd.dump("SizeOfUninitializedData             %08X\n", fd.File.OptionalHeader.SizeOfUninitializedData)
+	fd.dump("AddressOfEntryPoint                 %08X\n", fd.File.OptionalHeader.AddressOfEntryPoint)
+	fd.dump("BaseOfCode                          %08X\n", fd.File.OptionalHeader.BaseOfCode)
 
 	isPe32Plus, _ := fd.File.IsPe32Plus()
 	if !isPe32Plus {
-		fd.dump("BaseOfData                  %08X\n", fd.File.OptionalHeader.BaseOfData)
+		fd.dump("BaseOfData                          %08X\n", fd.File.OptionalHeader.BaseOfData)
 	}
 
 	// Variable size fields (part 1)
 	if !isPe32Plus {
-		fd.dump("ImageBase                   %08X\n", fd.File.OptionalHeader.ImageBase)
+		fd.dump("ImageBase                           %08X\n", fd.File.OptionalHeader.ImageBase)
 	} else {
 		fd.dump("ImageBase                   %016X\n", fd.File.OptionalHeader.ImageBase)
 	}
 
 	// Extension fields (part 1)
-	fd.dump("SectionAlignment            %08X\n", fd.File.OptionalHeader.SectionAlignment)
-	fd.dump("FileAlignment               %08X\n", fd.File.OptionalHeader.FileAlignment)
-	fd.dump("MajorOperatingSystemVersion %04X\n", fd.File.OptionalHeader.MajorOperatingSystemVersion)
-	fd.dump("MinorOperatingSystemVersion %04X\n", fd.File.OptionalHeader.MinorOperatingSystemVersion)
-	fd.dump("MajorImageVersion           %04X\n", fd.File.OptionalHeader.MajorImageVersion)
-	fd.dump("MinorImageVersion           %04X\n", fd.File.OptionalHeader.MinorImageVersion)
-	fd.dump("MajorSubsystemVersion       %04X\n", fd.File.OptionalHeader.MajorSubsystemVersion)
-	fd.dump("MinorSubsystemVersion       %04X\n", fd.File.OptionalHeader.MinorSubsystemVersion)
-	fd.dump("Win32VersionValue           %08X\n", fd.File.OptionalHeader.Win32VersionValue)
-	fd.dump("SizeOfImage                 %08X\n", fd.File.OptionalHeader.SizeOfImage)
-	fd.dump("SizeOfHeaders               %08X\n", fd.File.OptionalHeader.SizeOfHeaders)
-	fd.dump("CheckSum                    %08X\n", fd.File.OptionalHeader.CheckSum)
-	fd.dump("Subsystem                   %04X\n", fd.File.OptionalHeader.Subsystem)
+	fd.dump("SectionAlignment                    %08X\n", fd.File.OptionalHeader.SectionAlignment)
+	fd.dump("FileAlignment                       %08X\n", fd.File.OptionalHeader.FileAlignment)
+	fd.dump("MajorOperatingSystemVersion             %04X\n", fd.File.OptionalHeader.MajorOperatingSystemVersion)
+	fd.dump("MinorOperatingSystemVersion             %04X\n", fd.File.OptionalHeader.MinorOperatingSystemVersion)
+	fd.dump("MajorImageVersion                       %04X\n", fd.File.OptionalHeader.MajorImageVersion)
+	fd.dump("MinorImageVersion                       %04X\n", fd.File.OptionalHeader.MinorImageVersion)
+	fd.dump("MajorSubsystemVersion                   %04X\n", fd.File.OptionalHeader.MajorSubsystemVersion)
+	fd.dump("MinorSubsystemVersion                   %04X\n", fd.File.OptionalHeader.MinorSubsystemVersion)
+	fd.dump("Win32VersionValue                   %08X\n", fd.File.OptionalHeader.Win32VersionValue)
+	fd.dump("SizeOfImage                         %08X\n", fd.File.OptionalHeader.SizeOfImage)
+	fd.dump("SizeOfHeaders                       %08X\n", fd.File.OptionalHeader.SizeOfHeaders)
+	fd.dump("CheckSum                            %08X\n", fd.File.OptionalHeader.CheckSum)
+	fd.dump("Subsystem                               %04X\n", fd.File.OptionalHeader.Subsystem)
 	fd.indent()
 	switch fd.File.OptionalHeader.Subsystem {
 	default:
@@ -274,7 +284,7 @@ func (fd *FileDumper) DumpOptionalHeader() {
 		fd.dump("WINDOWS_BOOT_APPLICATION\n")
 	}
 	fd.unindent()
-	fd.dump("DllCharacteristics          %04X\n", fd.File.OptionalHeader.DllCharacteristics)
+	fd.dump("DllCharacteristics                      %04X\n", fd.File.OptionalHeader.DllCharacteristics)
 	fd.indent()
 	if fd.File.OptionalHeader.DllCharacteristics&windef.IMAGE_DLLCHARACTERISTICS_HIGH_ENTROPY_VA != 0 {
 		fd.dump("HIGH_ENTROPY_VA                            Image can handle a high entropy 64-bit virtual address space.\n")
@@ -312,10 +322,10 @@ func (fd *FileDumper) DumpOptionalHeader() {
 	fd.unindent()
 	// Variable size fields (part 2)
 	if !isPe32Plus {
-		fd.dump("SizeOfStackReserve          %08X\n", fd.File.OptionalHeader.SizeOfStackReserve)
-		fd.dump("SizeOfStackCommit           %08X\n", fd.File.OptionalHeader.SizeOfStackCommit)
-		fd.dump("SizeOfHeapReserve           %08X\n", fd.File.OptionalHeader.SizeOfHeapReserve)
-		fd.dump("SizeOfHeapCommit            %08X\n", fd.File.OptionalHeader.SizeOfHeapCommit)
+		fd.dump("SizeOfStackReserve                  %08X\n", fd.File.OptionalHeader.SizeOfStackReserve)
+		fd.dump("SizeOfStackCommit                   %08X\n", fd.File.OptionalHeader.SizeOfStackCommit)
+		fd.dump("SizeOfHeapReserve                   %08X\n", fd.File.OptionalHeader.SizeOfHeapReserve)
+		fd.dump("SizeOfHeapCommit                    %08X\n", fd.File.OptionalHeader.SizeOfHeapCommit)
 	} else {
 		fd.dump("SizeOfStackReserve          %016X\n", fd.File.OptionalHeader.SizeOfStackReserve)
 		fd.dump("SizeOfStackCommit           %016X\n", fd.File.OptionalHeader.SizeOfStackCommit)
@@ -323,14 +333,14 @@ func (fd *FileDumper) DumpOptionalHeader() {
 		fd.dump("SizeOfHeapCommit            %016X\n", fd.File.OptionalHeader.SizeOfHeapCommit)
 	}
 	// Extension fields (part 2)
-	fd.dump("LoaderFlags                 %08X\n", fd.File.OptionalHeader.LoaderFlags)
-	fd.dump("NumberOfRvaAndSizes         %08X\n", fd.File.OptionalHeader.NumberOfRvaAndSizes)
+	fd.dump("LoaderFlags                         %08X\n", fd.File.OptionalHeader.LoaderFlags)
+	fd.dump("NumberOfRvaAndSizes                 %08X\n", fd.File.OptionalHeader.NumberOfRvaAndSizes)
 	// Data directories
 	fd.dump("DataDirectories:\n")
 	for i, dd := range fd.File.OptionalHeader.DataDirectory {
 		fd.dump("  %s\n", windef.MAP_IMAGE_DIRECTORY_ENTRY[i])
-		fd.dump("    VirtualAddress: %08X\n", dd.VirtualAddress)
-		fd.dump("    Size:           %08X\n", dd.Size)
+		fd.dump("    VirtualAddress:         %08X\n", dd.VirtualAddress)
+		fd.dump("    Size:                   %08X\n", dd.Size)
 	}
 	fd.unindent()
 }
@@ -353,8 +363,8 @@ func (fd *FileDumper) DumpSectionsHeaders() {
 		fd.dump("PointerToRawData     %08X\n", s.PointerToRawData)
 		fd.dump("PointerToRelocations %08X\n", s.PointerToRelocations)
 		fd.dump("PointerToLineNumbers %08X\n", s.PointerToLineNumbers)
-		fd.dump("NumberOfRelocations  %04X\n", s.NumberOfRelocations)
-		fd.dump("NumberOfLineNumbers  %04X\n", s.NumberOfLineNumbers)
+		fd.dump("NumberOfRelocations      %04X\n", s.NumberOfRelocations)
+		fd.dump("NumberOfLineNumbers      %04X\n", s.NumberOfLineNumbers)
 		fd.dump("Characteristics      %08X\n", s.Characteristics)
 		fd.indent()
 		if s.Characteristics&windef.IMAGE_SCN_CNT_CODE != 0 {
@@ -483,7 +493,7 @@ func (fd *FileDumper) DumpSectionsRelocations() {
 		for j := range relocations {
 			fd.dump("VirtualAddress   %08X\n", relocations[j].VirtualAddress)
 			fd.dump("SymbolTableIndex %08X\n", relocations[j].SymbolTableIndex)
-			fd.dump("Type             %04X     (%s)\n", relocations[j].Type, fd.sectRelTypeName(relocations[j].Type))
+			fd.dump("Type                 %04X (%s)\n", relocations[j].Type, fd.sectRelTypeName(relocations[j].Type))
 		}
 		fd.unindent()
 		fd.dump("\n")
@@ -548,16 +558,70 @@ func (fd *FileDumper) DumpBaseRelocations() {
 		fd.dump("Entries:\n")
 		fd.indent()
 		for _, e := range brel.Entries() {
-			var typeName string
+			typeName := "Unknown"
 			if e.Type() < len(windef.MAP_IMAGE_REL_BASED) {
 				typeName = windef.MAP_IMAGE_REL_BASED[e.Type()]
-			} else {
-				typeName = fmt.Sprintf("Unknown (%02X)", e.Type())
 			}
-			fd.dump("%s %08X (%08X)\n", typeName, e.Offset(), brel.VirtualAddress+e.Offset())
+			fd.dump("%02X (%s) %08X (%08X)\n", e.Type(), typeName, e.Offset(), brel.VirtualAddress+e.Offset())
 		}
 		fd.unindent()
 		fd.unindent()
+	}
+}
+
+func (fd *FileDumper) DumpSymbols() {
+	if fd.File.Symbols == nil {
+		return
+	}
+	var ok bool
+	var sectionName string
+	var storageClassName string
+	var typeName string
+	var dtypeName string
+	for i := 0; i < len(fd.File.Symbols); {
+		s := fd.File.Symbols[i]
+		fd.dump("Symbol #%d `%s`\n", i, s.NameString())
+		fd.indent()
+		if s.SectionNumber > 0 && int(s.SectionNumber) <= len(fd.File.Sections) {
+			sectionName = fd.File.Sections[s.SectionNumber-1].NameString()
+		} else {
+			sectionName, ok = windef.MAP_IMAGE_SYM_NUMBER[s.SectionNumber]
+			if !ok {
+				sectionName = "Unknown"
+			}
+		}
+		storageClassName, ok = windef.MAP_IMAGE_SYM_CLASS[s.StorageClass]
+		if !ok {
+			storageClassName = "Unknown"
+		}
+		if int(s.Type.Base) < len(windef.MAP_IMAGE_SYM_TYPE) {
+			typeName = windef.MAP_IMAGE_SYM_TYPE[s.Type.Base]
+		} else {
+			typeName = "Unknown"
+		}
+		if int(s.Type.Derived) < len(windef.MAP_IMAGE_SYM_DTYPE) {
+			dtypeName = windef.MAP_IMAGE_SYM_DTYPE[s.Type.Derived]
+		} else {
+			dtypeName = "Unknown"
+		}
+		fd.dump("Name               %16s\n", hex.EncodeToString(s.Name[:]))
+		fd.dump("Value                      %08X\n", s.Value)
+		fd.dump("SectionNumber      %16d (%s)\n", s.SectionNumber, sectionName)
+		fd.dump("Type                           %02X%02X (%s %s)\n", s.Type.Derived, s.Type.Base, dtypeName, typeName)
+		fd.dump("StorageClass       %16d (%s)\n", s.StorageClass, storageClassName)
+		fd.dump("NumberOfAuxSymbols %16d\n", s.NumberOfAuxSymbols)
+		if s.NumberOfAuxSymbols > 0 {
+			auxSymCount := int(s.NumberOfAuxSymbols)
+			// fd.indent()
+			// for j := 0; j < auxSymCount; j++ {
+			// 	//TODO: add support for aux symbols
+			// }
+			// fd.unindent()
+			i += auxSymCount
+		}
+		fd.unindent()
+		fd.dump("\n")
+		i++
 	}
 }
 
