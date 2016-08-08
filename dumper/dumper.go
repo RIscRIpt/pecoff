@@ -45,6 +45,12 @@ func (fd *FileDumper) dump(format string, a ...interface{}) {
 
 func (fd *FileDumper) DumpAll() {
 	fd.DumpHeaders()
+
+	fd.dump("StringTable:\n")
+	fd.indent()
+	fd.DumpStringTable()
+	fd.unindent()
+	fd.dump("\n")
 }
 
 func (fd *FileDumper) DumpHeaders() {
@@ -504,5 +510,22 @@ func (fd *FileDumper) DumpBaseRelocations() {
 		}
 		fd.unindent()
 		fd.unindent()
+	}
+}
+
+func (fd *FileDumper) DumpStringTable() {
+	if fd.File.StringTable == nil {
+		return
+	}
+	size := len(fd.File.StringTable)
+	fd.dump("Size: %d (%08X)\n", size, size)
+	// first 4 bytes represent a size (uint32) of a string table
+	for offset := 4; offset < size; {
+		str, err := fd.File.StringTable.GetString(offset)
+		if err != nil {
+			panic(err)
+		}
+		fd.dump("%11d (%08X): `%s`\n", offset, offset, str)
+		offset += len(str) + 1
 	}
 }
