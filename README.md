@@ -1,6 +1,6 @@
 # pecoff
 [![Build Status](https://travis-ci.org/RIscRIpt/pecoff.svg?branch=master)](https://travis-ci.org/RIscRIpt/pecoff)
-[![Coverage Status](https://coveralls.io/repos/github/RIscRIpt/pecoff/badge.svg)](https://coveralls.io/github/RIscRIpt/pecoff)
+[![Coverage](https://gocover.io/_badge/github.com/RIscRIpt/pecoff?1)](https://gocover.io/github.com/RIscRIpt/pecoff)
 [![Go Report Card](https://goreportcard.com/badge/github.com/RIscRIpt/pecoff)](https://goreportcard.com/report/github.com/RIscRIpt/pecoff)
 [![GoDoc](https://img.shields.io/badge/godoc-reference-blue.svg)](http://godoc.org/github.com/RIscRIpt/pecoff)
 [![License](https://img.shields.io/badge/license-gnu%20gpl%20v3-663366.svg)](https://github.com/RIscRIpt/pecoff/blob/master/LICENSE)
