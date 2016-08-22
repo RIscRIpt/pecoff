@@ -6,7 +6,8 @@ import (
 	"github.com/RIscRIpt/pecoff/windef"
 )
 
-// DdImports {{{1
+// DdImports is an imports data directory wrapper which holds
+// imported libraries and their functions.
 type DdImports struct {
 	windef.DataDirectory
 	offset  int64
@@ -37,49 +38,19 @@ func (i *DdImports) append(imp *Import) {
 	}
 }
 
+// Get returns a map of imported functions, where the key is a library.
 func (i *DdImports) Get() map[string]*Import {
 	return i.imports
 }
 
+// Import returns a pointer to Import with specified library.
+// If library is not imported, nil is returned.
 func (i *DdImports) Import(library string) *Import {
 	return i.imports[library]
 }
 
-// End DdImports }}}1
-// ImportThunk {{{1
-type ImportThunk interface {
-	IsNull() bool
-	IsOrdinal() bool
-
-	Ordinal() uint16
-	HintRVA() uint32
-	NameRVA() uint32
-
-	Size() int64
-}
-
-type ImportThunk32 uint32
-type ImportThunk64 uint64
-
-func (t ImportThunk32) IsNull() bool { return t == 0 }
-func (t ImportThunk64) IsNull() bool { return t == 0 }
-
-func (t ImportThunk32) IsOrdinal() bool { return (t & 0x80000000) != 0 }
-func (t ImportThunk64) IsOrdinal() bool { return (t & 0x8000000000000000) != 0 }
-
-func (t ImportThunk32) Ordinal() uint16 { return uint16(t & 0xFFFF) }
-func (t ImportThunk64) Ordinal() uint16 { return uint16(t & 0xFFFF) }
-
-func (t ImportThunk32) HintRVA() uint32 { return uint32(t) }
-func (t ImportThunk64) HintRVA() uint32 { return uint32(t) }
-func (t ImportThunk32) NameRVA() uint32 { return uint32(t) + 2 }
-func (t ImportThunk64) NameRVA() uint32 { return uint32(t) + 2 }
-
-func (t ImportThunk32) Size() int64 { return 4 }
-func (t ImportThunk64) Size() int64 { return 8 }
-
-// End ImportThunk }}}1
-// Import {{{1
+// Import represents a collection of imported functions,
+// which belong to one library.
 type Import struct {
 	windef.ImportDescriptor
 	offset    int64
@@ -100,32 +71,32 @@ func (i *Import) merge(other *Import) {
 			i.library, other.library,
 		))
 	}
+	// FIXME: functions can be dupblicated.
 	i.functions = append(i.functions, other.functions...)
 }
 
+// Library returns a library name,
+// which has imported functions of the current import.
 func (i *Import) Library() string {
 	return i.library
 }
 
+// Functions returns a slice of ImportFunc
 func (i *Import) Functions() []ImportFunc {
 	return i.functions
 }
 
-// func (i *Import) SetAddresses(addresses map[string]uint64) {
-// 	for function := range addresses {
-// 		s := i.file.Sections.GetByVA(i.functions[function])
-// 		if i.file.Is64Bit() {
-// 			s.WriteVA(va, addresses[function])
-// 		} else {
-// 			s.WriteVA(va, uint32(addresses[function]))
-// 		}
-// 	}
-// }
-// End Import }}}1
-// ImportFunc {{{1
+// ImportFunc represents an import entry
+// inside a PE import data directory, it has two fields:
+//     - Hint: an index into the export name pointer table. A
+//             match is attempted first with this value. If it
+//             fails, a binary search is performed on the DLL’s
+//             export name pointer table.
+//     - Name: an ASCII string that contains the name to
+//             import. This is the string that must be matched
+//             to the public name in the DLL. This string is
+//             case sensitive and terminated by a null byte.
 type ImportFunc struct {
 	Hint uint16
 	Name string
 }
-
-// End ImportFunc }}}1

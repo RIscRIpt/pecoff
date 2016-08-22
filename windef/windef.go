@@ -270,6 +270,7 @@ type (
 	}
 
 	// DataDirectory structures
+
 	ImportDescriptor struct {
 		OriginalFirstThunk uint32 // RVA to original unbound IAT (PIMAGE_THUNK_DATA)
 		Timestamp          uint32 // 0 if not bound, -1 if bound, and real date\time stamp in IMAGE_DIRECTORY_ENTRY_BOUND_IMPORT (new BIND) O.W. date/time stamp of DLL bound to (Old BIND)
@@ -436,7 +437,7 @@ var MAP_IMAGE_DIRECTORY_ENTRY = [...]string{
 	/* IMAGE_DIRECTORY_ENTRY_RESERVED:      */ "RESERVED",
 }
 
-// Section characteristics.
+// Section Characteristics.
 const (
 	_IMAGE_SCN_TYPE_REG    = 0x00000000 // Reserved.
 	_IMAGE_SCN_TYPE_DSECT  = 0x00000001 // Reserved.
@@ -712,6 +713,14 @@ const (
 	IMAGE_REL_BASED_MIPS_JMPADDR16 = 9  // The base relocation applies to a MIPS16 jump instruction.
 	IMAGE_REL_BASED_DIR64          = 10 // The base relocation applies the difference to the 64-bit field at offset.
 	IMAGE_NUMBEROF_IMAGE_REL_BASED = 11
+)
+
+// Base relocation entry bit fields
+const (
+	IMAGE_REL_BASED_BITS_TYPE   = 4
+	IMAGE_REL_BASED_BITS_OFFSET = 12
+
+	IMAGE_REL_BASED_BLOCK_MAX_VA = 1 << IMAGE_REL_BASED_BITS_OFFSET
 )
 
 var MAP_IMAGE_REL_BASED = [...]string{

@@ -3,8 +3,6 @@ package pecoff
 import (
 	"errors"
 	"fmt"
-	"io"
-	"sort"
 	"strconv"
 	"unsafe"
 
@@ -18,7 +16,7 @@ var supportedMachineTypes = [...]uint16{
 	windef.IMAGE_FILE_MACHINE_AMD64,
 }
 
-// List of errors {{{1
+// List of errors
 var (
 	ErrAlreadyRead    = errors.New("pecoff: already read")
 	ErrInvPeSign      = errors.New("pecoff: invalid PE signature")
@@ -51,25 +49,24 @@ var (
 	ErrFailCheckDosHeader      = errors.New("pecoff: failed to check whether the file has DOS header")
 
 	// A group of errors which are to be formatted (used in errorf or wrapErrorf method)
-	ErrfFailVaToOff            = "pecoff: failed to convert VA (@%08X) to file offset"      //fmt: VirtualAddress
-	ErrfFailGetSectByVA        = "pecoff: failed to find section which contains VA (@%08X)" //fmt: VirtualAddress
-	ErrfOptHdrUnkSize          = "pecoff: optionalHeader has unexpected size (%d)"          //fmt: size
-	ErrfFailReadSectionHeader  = "pecoff: failed to read a header of section#%d (%X)"       //fmt: sectionId, offset
-	ErrfFailReadSectionRawData = "pecoff: failed to read rawdata of section#%d (%X)"        //fmt: sectionId, offset
-	ErrfFailReadSectionReloc   = "pecoff: failed to read relocation#%d of section #%d (%X)" //fmt: relocationId, sectionId, offset
-	ErrfFailReadSymbol         = "pecoff: failed to read symbol#%d (%X)"                    //fmt: symbolId, offset
-	ErrfFailReadStrTblSize     = "pecoff: failed to read string table size (%X)"            //fmt: offset
-	ErrfFailReadStrTbl         = "pecoff: failed to read string table (%X)"                 //fmt: offset
-	ErrfFailReadImpDesc        = "pecoff: failed to read import descriptor#%d (%X)"         //fmt: descriptorId, offset
-	ErrfFailReadLibName        = "pecoff: failed to read library name (@%08X)"              //fmt: nameVA
-	ErrfFailReadImpThunk       = "pecoff: failed to read import thunk (%X)"                 //fmt: offset
-	ErrfFailReadImpThunkHint   = "pecoff: failed to read import thunk hint (@%08X)"         //fmt: VirtualAddress
-	ErrfFailReadImpThunkName   = "pecoff: failed to read import thunk name (@%08X)"         //fmt: VirtualAddress
-	ErrfFailReadBaseRel        = "pecoff: failed to read base relocation#%d (%X)"           //fmt: relocationId, offset
-	ErrfFailReadBaseRelEntries = "pecoff: failed to read base relocation#%d entries (%X)"   //fmt: relocationId, offset
+	ErrfFailVaToOff             = "pecoff: failed to convert VA (@%08X) to file offset"                  //fmt: VirtualAddress
+	ErrfFailGetSectByVA         = "pecoff: failed to find section which contains VA (@%08X)"             //fmt: VirtualAddress
+	ErrfOptHdrUnkSize           = "pecoff: optionalHeader has unexpected size (%d)"                      //fmt: size
+	ErrfFailReadSectionHeader   = "pecoff: failed to read a header of section#%d (%X)"                   //fmt: sectionId, offset
+	ErrfFailReadSectionRawData  = "pecoff: failed to read rawdata of section#%d (%X)"                    //fmt: sectionId, offset
+	ErrfFailReadSectionReloc    = "pecoff: failed to read relocation#%d of section #%d (%X)"             //fmt: relocationId, sectionId, offset
+	ErrfFailReadSymbol          = "pecoff: failed to read symbol#%d (%X)"                                //fmt: symbolId, offset
+	ErrfFailReadStrTblSize      = "pecoff: failed to read string table size (%X)"                        //fmt: offset
+	ErrfFailReadStrTbl          = "pecoff: failed to read string table (%X)"                             //fmt: offset
+	ErrfFailReadImpDesc         = "pecoff: failed to read import descriptor#%d (%X)"                     //fmt: descriptorId, offset
+	ErrfFailReadLibName         = "pecoff: failed to read library name (@%08X)"                          //fmt: nameVA
+	ErrfFailReadImpThunk        = "pecoff: failed to read import thunk (%X)"                             //fmt: offset
+	ErrfFailReadImpThunkHint    = "pecoff: failed to read import thunk hint (@%08X)"                     //fmt: VirtualAddress
+	ErrfFailReadImpThunkName    = "pecoff: failed to read import thunk name (@%08X)"                     //fmt: VirtualAddress
+	ErrfFailReadBaseRel         = "pecoff: failed to read base relocation#%d (%X)"                       //fmt: relocationId, offset
+	ErrfFailReadBaseRelEntries  = "pecoff: failed to read base relocation#%d entries (%X)"               //fmt: relocationId, offset
+	ErrfFailFindBaseRelsFromInt = "pecoff: failed to find base relocations within interval [%08X; %08X)" //fmt: VirtualAddress, VirtualAddress
 )
-
-// End List of errors }}}1
 
 // File contains embedded io.Reader and all the fields of a PE/COFF file.
 type File struct {
@@ -78,19 +75,24 @@ type File struct {
 	Signature      [4]byte
 	FileHeader     *windef.FileHeader
 	OptionalHeader *OptionalHeader
-	Sections       Sections
+	Sections       *Sections
 	Symbols        Symbols
 	StringTable    StringTable
 }
 
-// NewFile creates a new File object
-func NewFile(reader binutil.ReaderAtInto) *File {
+// Explore creates a new File object
+func Explore(reader binutil.ReaderAtInto) *File {
 	return &File{
 		ReaderAtInto: reader,
 	}
 }
 
-// === File helper functions for error handling === {{{1
+// Seal eliminates all external pointers (relatively to this package), so a
+// File object can be long-term stored without holding any (useless) resources.
+// For example after calling ReadAll method, and having all the data read from the file.
+func (f *File) Seal() {
+	f.ReaderAtInto = nil
+}
 
 func (f *File) error(err error) error {
 	return err
@@ -112,9 +114,10 @@ func (f *File) wrapErrorf(innerError error, format string, a ...interface{}) err
 	return f.wrapError(innerError, fmt.Errorf(format, a...))
 }
 
-// End File helper functions for error handling }}}1
-// === File binary readers === {{{1
-
+// ReadVaInto is a wrapper method, which uses VaToOffset
+// to convert virtual address `va` to a file offset
+// and calls ReadAtInto method afterwards.
+// If a call to VaToOffset fails, an error is returned.
 func (f *File) ReadVaInto(p interface{}, va uint32) error {
 	off, err := f.VaToOffset(va)
 	if err != nil {
@@ -123,6 +126,10 @@ func (f *File) ReadVaInto(p interface{}, va uint32) error {
 	return f.ReadAtInto(p, off)
 }
 
+// ReadStringVa is a wrapper method, which uses VaToOffset
+// to convert virtual address `va` to a file offset
+// and calls ReadStringAt method afterwards.
+// If a call to VaToOffset fails, empty string and an error are returned.
 func (f *File) ReadStringVa(va uint32, maxlen int) (string, error) {
 	off, err := f.VaToOffset(va)
 	if err != nil {
@@ -131,10 +138,8 @@ func (f *File) ReadStringVa(va uint32, maxlen int) (string, error) {
 	return f.ReadStringAt(off, maxlen)
 }
 
-// End File binary readers }}}1
-
-// ReadAll parses pe/coff file reading all the data of the file into the memory
-// Returns an error if any occured during the parsing
+// ReadAll parses pe/coff file reading all the data of the file into the memory.
+// Returns an error if any occured during the parsing.
 func (f *File) ReadAll() (err error) {
 	if err = f.ReadHeaders(); err != nil {
 		return f.wrapError(err, ErrFailReadHeaders)
@@ -154,9 +159,9 @@ func (f *File) ReadAll() (err error) {
 	if err = f.ReadSectionsRelocations(); err != nil {
 		return f.wrapError(err, ErrFailReadSectionsRelocs)
 	}
-	if err = f.ReadSectionsLineNumbers(); err != nil {
-		return f.wrapError(err, ErrFailReadSectionsLineNrs)
-	}
+	// if err = f.ReadSectionsLineNumbers(); err != nil {
+	// 	return f.wrapError(err, ErrFailReadSectionsLineNrs)
+	// }
 	if f.OptionalHeader != nil {
 		if err = f.ReadDataDirs(); err != nil {
 			return f.wrapError(err, ErrFailReadDataDirs)
@@ -165,27 +170,23 @@ func (f *File) ReadAll() (err error) {
 	return
 }
 
-// WriteAll writes pe/coff file to `out`, and returns error if any
-func (f *File) WriteAll(out io.Writer) error {
-	panic("not implemented")
-}
+// // WriteAll writes pe/coff file to `out`, and returns error if any
+// func (f *File) WriteAll(out io.Writer) error {
+// 	panic("not implemented")
+// }
 
-// === File offsets converters === {{{1
 // VaToOffset returns a file offset which points to
 // data pointed by `va` virtual address
 func (f *File) VaToOffset(va uint32) (int64, error) {
 	if f.Sections == nil {
 		return 0, f.error(ErrNoSectionsHeaders)
 	}
-	s := f.Sections.GetByVA(va)
-	if s == nil {
-		return 0, f.errorf(ErrfFailGetSectByVA, va)
+	s, err := f.Sections.GetByVA(va)
+	if err != nil {
+		return 0, f.wrapErrorf(err, ErrfFailGetSectByVA, va)
 	}
 	return s.VaToFileOffset(va), nil
 }
-
-// End File offsets converters }}}1
-// === File offsets getters === {{{1
 
 // GetFileHeaderOffset returns an offset to the FileHeader within PE file.
 // If DosHeader is nil (i.e. doesn't exists, or wasn't read), offset is
@@ -193,9 +194,8 @@ func (f *File) VaToOffset(va uint32) (int64, error) {
 func (f *File) GetFileHeaderOffset() int64 {
 	if f.DosHeader == nil {
 		return windef.OFFSET_COFF_FILE_HEADER
-	} else {
-		return int64(f.DosHeader.E_lfanew) + int64(len(windef.PE_SIGN))
 	}
+	return int64(f.DosHeader.E_lfanew) + int64(len(windef.PE_SIGN))
 }
 
 func (f *File) getOptHeaderOffset() int64 {
@@ -209,9 +209,6 @@ func (f *File) getSectionsHeadersOffset() int64 {
 func (f *File) getStringTableOffset() int64 {
 	return int64(f.FileHeader.PointerToSymbolTable) + int64(f.FileHeader.NumberOfSymbols)*windef.SIZEOF_IMAGE_SYMBOL
 }
-
-// End File offsets getters }}}1
-// === File checkers === {{{1
 
 // Is64Bit returns true if Machine type of file header equals to AMD64 or IA64
 // If FileHeader is nil (i.e. wasn't read) an error ErrNoFileHeader is returned.
@@ -301,9 +298,6 @@ func (f *File) existsOptHeader() bool {
 	return f.FileHeader.SizeOfOptionalHeader > 0
 }
 
-// End File checkers }}}1
-// === File headers readers === {{{1
-
 // ReadHeaders reads:
 //     - DosHeader (if it is presented in the file);
 //     - Signature (if it is presented in the file), and validates it;
@@ -355,6 +349,10 @@ func (f *File) ReadDosHeader() error {
 	return nil
 }
 
+// ReadSignature tries to read a signature ('PE\0\0')
+// pointed by lfanew field of the DosHeader.
+// Returns an error ErrNoDosHeader if DosHeader is not presented,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadSignature() error {
 	if f.DosHeader == nil {
 		return f.error(ErrNoDosHeader)
@@ -368,6 +366,9 @@ func (f *File) ReadSignature() error {
 	return nil
 }
 
+// ReadFileHeader reads PE/COFF file header.
+// Returns an error ErrAlreadyRead, if it has already been read,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadFileHeader() error {
 	if f.FileHeader != nil {
 		return f.error(ErrAlreadyRead)
@@ -380,6 +381,11 @@ func (f *File) ReadFileHeader() error {
 	return nil
 }
 
+// ReadOptHeader reads an optional header of a PE file.
+// FileHeader must be read before calling this method,
+// otherwise an error ErrNoFileHeader is returned.
+// Returns an error ErrAlreadyRead, if it has already been read,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadOptHeader() error {
 	if f.FileHeader == nil {
 		return f.error(ErrNoFileHeader)
@@ -408,6 +414,9 @@ func (f *File) ReadOptHeader() error {
 	return nil
 }
 
+// ReadSectionsHeaders reads headers of sections of a PE/COFF file.
+// Returns an error ErrAlreadyRead, if it has already been read,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadSectionsHeaders() error {
 	if f.FileHeader == nil {
 		return f.error(ErrNoFileHeader)
@@ -415,10 +424,11 @@ func (f *File) ReadSectionsHeaders() error {
 	if f.Sections != nil {
 		return f.error(ErrAlreadyRead)
 	}
-	sections := make(Sections, int(f.FileHeader.NumberOfSections))
+	sections := newSections(int(f.FileHeader.NumberOfSections))
 	baseOffset := f.getSectionsHeadersOffset()
-	for i := range sections {
+	for i := range sections.array {
 		s := new(Section)
+		s.id = i
 		offset := baseOffset + int64(i)*windef.SIZEOF_IMAGE_SECTION_HEADER
 		if err := f.ReadAtInto(&s.SectionHeader, offset); err != nil {
 			return f.wrapErrorf(err, ErrfFailReadSectionHeader, i, offset)
@@ -440,24 +450,25 @@ func (f *File) ReadSectionsHeaders() error {
 				}
 			}
 		}
-		sections[i] = s
+		sections.array[i] = s
 	}
 	// Sort is required for efficient work of Sections.GetByVA method,
 	// which uses a binary search algorithm of sort.Search
 	// to find a section by VirtualAddress.
-	sort.Sort(sections)
+	sections.sort()
 	f.Sections = sections
 	return nil
 }
 
-// End File headers readers }}}1
-// === File Sections readers === {{{1
-
+// ReadSectionsRawData reads contents (raw data) of all sections into memory.
+// Headers of sections must be read before calling this method,
+// otherwise an error ErrNoSectionsHeaders is returned.
+// An error is returned if any occured while reading data.
 func (f *File) ReadSectionsRawData() error {
 	if f.Sections == nil {
 		return f.error(ErrNoSectionsHeaders)
 	}
-	for i, s := range f.Sections {
+	for i, s := range f.Sections.array {
 		rawData := make([]byte, s.SizeOfRawData)
 		if s.SizeOfRawData != 0 {
 			if _, err := f.ReadAt(rawData, int64(s.PointerToRawData)); err != nil {
@@ -469,11 +480,15 @@ func (f *File) ReadSectionsRawData() error {
 	return nil
 }
 
+// ReadSectionsRelocations reads relocations of all sections.
+// Headers of sections must be read before calling this method,
+// otherwise an error ErrNoSectionsHeaders is returned.
+// An error is returned if any occured while reading data.
 func (f *File) ReadSectionsRelocations() error {
 	if f.Sections == nil {
 		return f.error(ErrNoSectionsHeaders)
 	}
-	for i, s := range f.Sections {
+	for i, s := range f.Sections.array {
 		relocations := make([]windef.Relocation, s.NumberOfRelocations)
 		for j := range relocations {
 			offset := int64(s.PointerToRelocations) + int64(j)*windef.SIZEOF_IMAGE_RELOCATION
@@ -486,16 +501,22 @@ func (f *File) ReadSectionsRelocations() error {
 	return nil
 }
 
+// ReadSectionsLineNumbers reads line numbers of all sections.
+// Headers of sections must be read before calling this method,
+// otherwise an error ErrNoSectionsHeaders is returned.
+// An error is returned if any occured while reading data.
 func (f *File) ReadSectionsLineNumbers() error {
 	if f.Sections == nil {
 		return f.error(ErrNoSectionsHeaders)
 	}
-	return nil
+	//TODO: implement this.
+	return f.error(errors.New("pecoff: ReadSectionsLineNumbers is not implemented"))
 }
 
-// End File Sections readers }}}1
-// === File Symbols reader === {{{1
-
+// ReadSymbols reads all symbols from the symbol table.
+// FileHeader must be read before calling this method,
+// otherwise an error ErrNoFileHeader is returned.
+// An error is returned if any occured while reading data.
 func (f *File) ReadSymbols() error {
 	if f.FileHeader == nil {
 		return f.error(ErrNoFileHeader)
@@ -531,9 +552,10 @@ func (f *File) ReadSymbols() error {
 	return nil
 }
 
-// End File Symbols reader }}}1
-// === File String table reader === {{{1
-
+// ReadStringTable reads the whole COFF string table into the memory.
+// FileHeader must be read before calling this method,
+// otherwise an error ErrNoFileHeader is returned.
+// An error is returned if any occured while reading data.
 func (f *File) ReadStringTable() error {
 	if f.FileHeader == nil {
 		return f.error(ErrNoFileHeader)
@@ -562,9 +584,7 @@ func (f *File) ReadStringTable() error {
 	return nil
 }
 
-// End File Sections contents reader }}}1
-// === File DataDirectory readers === {{{1
-
+// ReadDataDirs calls methods which read a
 func (f *File) ReadDataDirs() error {
 	if f.OptionalHeader == nil {
 		return f.error(ErrNoOptHeader)
@@ -603,6 +623,11 @@ func (f *File) ReadDataDirs() error {
 	return nil
 }
 
+// ReadDataDirImports reads import data directory of a PE file.
+// OptionalHeader must be read before calling this method,
+// otherwise an error ErrNoOptHeader is returned.
+// Returns an error ErrAlreadyRead, if it has already been read,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadDataDirImports() (err error) {
 	if f.OptionalHeader == nil {
 		return f.error(ErrNoOptHeader)
@@ -675,6 +700,11 @@ func (f *File) ReadDataDirImports() (err error) {
 	return nil
 }
 
+// ReadDataDirBaseRels reads base relocations data directory of a PE file.
+// OptionalHeader must be read before calling this method,
+// otherwise an error ErrNoOptHeader is returned.
+// Returns an error ErrAlreadyRead, if it has already been read,
+// or an error from ReadAtInto method, if any.
 func (f *File) ReadDataDirBaseRels() (err error) {
 	if f.OptionalHeader == nil {
 		return f.error(ErrNoOptHeader)
@@ -701,8 +731,10 @@ func (f *File) ReadDataDirBaseRels() (err error) {
 			baseRels.append(block)
 		}
 	}
+	// Sort is required for efficient work of DdBaseRelocations.GetFromInterval
+	// method which uses a binary search algorithm of sort.Search
+	// to find base relocation block by its VirtualAddress.
+	baseRels.sort()
 	f.OptionalHeader.DataDirs.BaseRelocations = baseRels
 	return nil
 }
-
-// End File DataDirectory readers }}}1

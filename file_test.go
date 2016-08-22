@@ -1,6 +1,7 @@
 package pecoff
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/RIscRIpt/pecoff/binutil"
+	"github.com/RIscRIpt/pecoff/windef"
 )
 
 const (
@@ -30,8 +32,8 @@ func parseFile(t *testing.T, filename string) *File {
 		t.Errorf("Failed to open test file `%s`", filename)
 		return nil
 	}
-
-	file := NewFile(binutil.WrapReaderAt(rawFile))
+	defer rawFile.Close()
+	file := Explore(binutil.WrapReaderAt(rawFile))
 	err = file.ReadAll()
 	if err != nil {
 		if fe, ok := err.(*FileError); ok {
@@ -40,6 +42,7 @@ func parseFile(t *testing.T, filename string) *File {
 		t.Errorf("Error occured while parsing file `%s`: %v", filename, err)
 		return nil
 	}
+	file.Seal()
 	return file
 }
 
@@ -102,4 +105,16 @@ func TestBitness(t *testing.T) {
 		}(file)
 	}
 	wg.Wait()
+}
+
+func Example_MachineType() {
+	file, _ := os.Open(testDir + "exe_32_fasm+1-71-39_aslr")
+	defer file.Close()
+	pe := Explore(binutil.WrapReaderAt(file))
+	pe.ReadDosHeader()
+	pe.ReadFileHeader()
+	pe.Seal()
+	fmt.Println(windef.MAP_IMAGE_FILE_MACHINE[pe.FileHeader.Machine])
+	// Output:
+	// I386
 }

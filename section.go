@@ -2,21 +2,33 @@ package pecoff
 
 import "github.com/RIscRIpt/pecoff/windef"
 
+// Section embedds a windef.SectionHeader struct
+// and stores unexported fields of parsed data of a section,
+// such as string represntation of the section name, raw data, and etc...
 type Section struct {
+	id int
 	windef.SectionHeader
 	nameString  string
 	rawData     []byte
 	relocations []windef.Relocation
 }
 
+// ID returns a real id of a section inside a PE/COFF file.
+func (s *Section) ID() int {
+	return s.id
+}
+
+// NameString returns string represntation of a SectionHeader.Name field.
 func (s *Section) NameString() string {
 	return s.nameString
 }
 
+// VaToSectionOffset converts virtual address to the offset within section.
 func (s *Section) VaToSectionOffset(va uint32) int64 {
 	return int64(va - s.VirtualAddress)
 }
 
+// VaToFileOffset converts virtual address to the file offset.
 func (s *Section) VaToFileOffset(va uint32) int64 {
 	return s.VaToSectionOffset(va) + int64(s.PointerToRawData)
 }
@@ -26,28 +38,7 @@ func (s *Section) RawData() []byte {
 	return s.rawData
 }
 
+// Relocations returns a slice of relocations of the section.
 func (s *Section) Relocations() []windef.Relocation {
 	return s.relocations
 }
-
-// func (s *Section) ApplyBaseRelocation(baseDest, baseSrc uint32, relocation BaseRelocation) {
-// 	offset := s.VaToSectionOffset(baseSrc) + int64(relocation.Offset())
-// 	switch relocation.Type() {
-// 	//case IMAGE_REL_BASED_HIGH:
-// 	//case IMAGE_REL_BASED_LOW:
-// 	case IMAGE_REL_BASED_HIGHLOW:
-// 		(*(*uint32)(&s.rawData[offset])) += uint32(baseDest - s.VirtualAddress)
-// 	//case IMAGE_REL_BASED_HIGHADJ:
-// 	//case IMAGE_REL_BASED_DIR64:
-// 	default:
-// 		panic("Unsupported relocation type!")
-// 	}
-// }
-
-// func (s *Section) WriteAt(offset int64, data interface{}) {
-// 	binary.Write(s.RawDataBuffer(), binary.LittleEndian, data)
-// }
-
-// func (s *Section) WriteVa(va uint32, data interface{}) {
-// 	s.WriteAt(s.VaToSectionOffset(va), data)
-// }

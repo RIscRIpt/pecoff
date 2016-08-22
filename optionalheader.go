@@ -2,11 +2,14 @@ package pecoff
 
 import "github.com/RIscRIpt/pecoff/windef"
 
+// OptionalHeader embedds windef.OptionalHeaderCommon, and stores DataDirs.
 type OptionalHeader struct {
 	windef.OptionalHeaderCommon
 	DataDirs DataDirs
 }
 
+// From32 sets values of OptionalHeaderCommon
+// from a 32-bit version of an optional header.
 func (oh *OptionalHeader) From32(oh32 *windef.OptionalHeader32) {
 	oh.OptionalHeaderCommon = windef.OptionalHeaderCommon{
 		Magic:                       oh32.Magic,
@@ -43,6 +46,8 @@ func (oh *OptionalHeader) From32(oh32 *windef.OptionalHeader32) {
 	}
 }
 
+// From64 sets values of OptionalHeaderCommon
+// from a 64-bit version of an optional header.
 func (oh *OptionalHeader) From64(oh64 *windef.OptionalHeader64) {
 	oh.OptionalHeaderCommon = windef.OptionalHeaderCommon{
 		Magic:                       oh64.Magic,

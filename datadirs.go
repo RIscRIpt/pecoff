@@ -1,5 +1,6 @@
 package pecoff
 
+// DataDirs represents a collection of pointers to all possible data directories.
 type DataDirs struct {
 	// Exports         *DdExports
 	Imports *DdImports

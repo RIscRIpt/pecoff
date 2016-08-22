@@ -349,7 +349,7 @@ func (fd *FileDumper) DumpSectionsHeaders() {
 	if fd.File.Sections == nil {
 		return
 	}
-	for i, s := range fd.File.Sections {
+	for i, s := range fd.File.Sections.Array() {
 		fd.dump("Section #%d\n", i+1)
 		fd.indent()
 		nullIndex := bytes.IndexByte(s.Name[:], 0)
@@ -483,7 +483,7 @@ func (fd *FileDumper) DumpSectionsRelocations() {
 	if fd.File.Sections == nil {
 		return
 	}
-	for i, s := range fd.File.Sections {
+	for i, s := range fd.File.Sections.Array() {
 		relocations := s.Relocations()
 		if len(relocations) == 0 {
 			continue
@@ -582,8 +582,12 @@ func (fd *FileDumper) DumpSymbols() {
 		s := fd.File.Symbols[i]
 		fd.dump("Symbol #%d `%s`\n", i, s.NameString())
 		fd.indent()
-		if s.SectionNumber > 0 && int(s.SectionNumber) <= len(fd.File.Sections) {
-			sectionName = fd.File.Sections[s.SectionNumber-1].NameString()
+		if s.SectionNumber > 0 && int(s.SectionNumber) <= fd.File.Sections.Len() {
+			section, err := fd.File.Sections.GetByID(s.SectionNumber)
+			if err != nil {
+				panic(err)
+			}
+			sectionName = section.NameString()
 		} else {
 			sectionName, ok = windef.MAP_IMAGE_SYM_NUMBER[s.SectionNumber]
 			if !ok {

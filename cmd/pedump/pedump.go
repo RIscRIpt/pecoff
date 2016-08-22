@@ -31,7 +31,7 @@ func main() {
 	}
 	defer file.Close()
 
-	pcfile := pecoff.NewFile(binutil.WrapReaderAt(file))
+	pcfile := pecoff.Explore(binutil.WrapReaderAt(file))
 	if err := pcfile.ReadAll(); err != nil {
 		fmt.Fprintln(os.Stderr, pecoff.ErrorFlatten(err))
 		os.Exit(ECfailReadAll)

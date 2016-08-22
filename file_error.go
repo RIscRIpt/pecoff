@@ -17,7 +17,8 @@ type FileError struct {
 // 	return e.error.Error()
 // }
 
-// ErrorsList returns a flattened list of errors from 'recursive' innerErrors
+// ToMultiError returns a flattened list of errors
+// formed from 'recursive' innerErrors
 func (e *FileError) ToMultiError() (list MultiError) {
 	err := e
 	for err != nil {
@@ -34,6 +35,8 @@ func (e *FileError) ToMultiError() (list MultiError) {
 	return
 }
 
+// ErrorFlatten returns err.ToMultiError if `err` implements FileError,
+// if not, an `err` without modifications is returned.
 func ErrorFlatten(err error) error {
 	if fe, ok := err.(*FileError); ok {
 		return fe.ToMultiError()
@@ -41,8 +44,14 @@ func ErrorFlatten(err error) error {
 	return err
 }
 
+// MultiError represents a collection of errors
 type MultiError []error
 
+// Error checks count of errors which are stored in the MultiError and
+// returns a string represntation of an error, if:
+//     0 entries   : "" (empty string);
+//     1 entry     : Error() value of the first error;
+//     >=2 entries : Error() values separated with new line character ('\n').
 func (e MultiError) Error() string {
 	switch len(e) {
 	case 0:
@@ -51,6 +60,8 @@ func (e MultiError) Error() string {
 		return e[0].Error()
 	default:
 		var buf bytes.Buffer
+		// no error checking of Write* methods,
+		// as according to the docs, err is always nil.
 		buf.WriteString(fmt.Sprintf("pecoff: multi error (%d)\n", len(e)))
 		for _, err := range e {
 			buf.WriteRune('\t')
