@@ -24,7 +24,7 @@ func Example_MachineType() {
     file, _ := os.Open(testDir + "exe_32_fasm+1-71-39_aslr")
     defer file.Close()
     // Creating PE/COFF File
-    pe := Explore(binutil.WrapReaderAt(file))
+    pe := pecoff.Explore(binutil.WrapReaderAt(file))
     // Reading DosHeader to get offset to the file header
     pe.ReadDosHeader()
     // Reading FileHeader
